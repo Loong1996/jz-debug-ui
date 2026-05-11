@@ -53,7 +53,16 @@ bool App::Init(int width, int height, const wchar_t* title) {
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGui::StyleColorsDark();
-    ImGui::GetIO().IniFilename = "debug_ui.ini";
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = "debug_ui.ini";
+
+    // Load bundled Chinese font; falls back to built-in if file is missing
+    ImFont* font = io.Fonts->AddFontFromFileTTF(
+        "assets/fonts/LXGWWenKai-Regular.ttf", 18.0f, nullptr,
+        io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+    if (!font)
+        io.Fonts->AddFontDefault();
 
     ImGui_ImplWin32_Init(hwnd_);
     ImGui_ImplDX11_Init(device_, ctx_);

@@ -36,3 +36,15 @@ target_link_libraries(debug_ui_demo PRIVATE
     dxgi
     d3dcompiler
 )
+
+# Copy assets/ next to the exe after each build so fonts are always available
+add_custom_command(TARGET debug_ui_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:debug_ui_demo>/assets
+)
+
+# VS debugger: run from project root so relative paths (assets/) work
+set_target_properties(debug_ui_demo PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
