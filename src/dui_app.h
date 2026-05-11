@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d11.h>
+#include <functional>
 
 namespace dui {
 
@@ -18,6 +19,10 @@ public:
     bool PumpMessages();   // returns false when WM_QUIT received
     void BeginFrame();
     void EndFrame();       // ImGui::Render + DX11 Present
+
+    // Single-call convenience: PumpMessages + BeginFrame + draw_fn() + EndFrame.
+    // Returns false when WM_QUIT is received (same as PumpMessages).
+    bool Tick(const std::function<void()>& draw_fn);
 
 private:
     HWND                    hwnd_      = nullptr;

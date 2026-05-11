@@ -173,4 +173,12 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+bool App::Tick(const std::function<void()>& draw_fn) {
+    if (!PumpMessages()) return false;
+    BeginFrame();
+    draw_fn();
+    EndFrame();
+    return true;
+}
+
 } // namespace dui

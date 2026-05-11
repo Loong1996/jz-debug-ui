@@ -14,10 +14,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::Metrics metrics;
 
     using Clock = std::chrono::steady_clock;
-    auto last_ui   = Clock::now();
     auto last_tick = Clock::now();
 
-    while (app.PumpMessages()) {
+    // app.Tick() pumps messages, draws one frame, then returns.
+    // Put game logic (tick + metrics update) in the loop body.
+    while (app.Tick([&]() {
+        dui::DrawInspector(world);
+        dui::DrawCanvas(world);
+        dui::DrawMetrics(metrics);
+    })) {
         auto now = Clock::now();
         float dt = std::chrono::duration<float>(now - last_tick).count();
         if (dt > 0.05f) dt = 0.05f;
@@ -25,22 +30,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
         auto t0 = Clock::now();
         dui::TickMockWorld(world, dt);
-        float tick_ms = std::chrono::duration<float>(
-            Clock::now() - t0).count() * 1000.f;
-        metrics.tick_ms.push(tick_ms);
-        metrics.entity_count.push(
-            static_cast<float>(world.entities.size()));
-
-        if (now - last_ui >= std::chrono::milliseconds(16)) {
-            last_ui = now;
-            app.BeginFrame();
-            dui::DrawInspector(world);
-            dui::DrawCanvas(world);
-            dui::DrawMetrics(metrics);
-            app.EndFrame();
-        }
+        metrics.tick_ms.push(
+            std::chrono::duration<float>(Clock::now() - t0).count() * 1000.f);
+        metrics.entity_count.push(static_cast<float>(world.entities.size()));
     }
 
-    app.Shutdown();
     return 0;
 }
