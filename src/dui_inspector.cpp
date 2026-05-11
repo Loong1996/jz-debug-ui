@@ -39,6 +39,16 @@ void DrawInspector(World& world) {
         }
     }
 
+    if (world.sel_cell_valid) {
+        ImGui::Separator();
+        ImGui::Text(u8"选中格子: (%d, %d)", world.sel_cell_x, world.sel_cell_y);
+        for (const auto& c : world.cells) {
+            if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
+            ImGui::Text(u8"类型: %d  名称: %s", c.type, c.label);
+            break;
+        }
+    }
+
     ImGui::End();
 }
 

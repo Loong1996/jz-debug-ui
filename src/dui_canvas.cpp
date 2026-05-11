@@ -27,8 +27,10 @@ void DrawCanvas(World& world) {
     const int pcy = player ? player->y : 0;
 
     // Isometric: +X → right-down, +Y → left-down
+    // Extreme screen reach of the grid boundary = (2*VIEW_HALF+1)*th from center.
+    // Fit that within half the shorter canvas dimension, with 1-cell margin.
     const ImVec2 center(p0.x + sz.x * 0.5f, p0.y + sz.y * 0.5f);
-    const float  th = (sz.x < sz.y ? sz.x : sz.y) * 0.5f / (VIEW_HALF + 1.5f);
+    const float  th = (sz.x < sz.y ? sz.x : sz.y) * 0.5f / (2.f * VIEW_HALF + 3.f);
 
     auto ToScreen = [&](float wx, float wy) -> ImVec2 {
         float dx = wx - static_cast<float>(pcx);
@@ -136,15 +138,28 @@ void DrawCanvas(World& world) {
                     IM_COL32(100, 210, 100, 200), "+Y");
     }
 
-    // --- Click selection ---
+    // --- Click selection: entity > cell > clear ---
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
-        world.selected_id = -1;
+        world.selected_id     = -1;
+        world.sel_cell_valid  = false;
+        bool hit = false;
         for (const auto& e : world.entities) {
             if (e.x == wx && e.y == wy) {
                 world.selected_id = static_cast<int>(e.id);
+                hit = true;
                 break;
+            }
+        }
+        if (!hit) {
+            for (const auto& c : world.cells) {
+                if (c.x == wx && c.y == wy) {
+                    world.sel_cell_valid = true;
+                    world.sel_cell_x     = wx;
+                    world.sel_cell_y     = wy;
+                    break;
+                }
             }
         }
     }

@@ -26,9 +26,12 @@ struct Cell {
 
 struct World {
     std::vector<Entity> entities;
-    std::vector<Cell>   cells;    // map mask layer (drawn before entities)
-    int selected_id = -1;
-    int player_id   = -1;
+    std::vector<Cell>   cells;        // map mask layer (drawn before entities)
+    int  selected_id  = -1;           // selected entity id
+    int  player_id    = -1;
+    bool sel_cell_valid = false;      // whether a cell is selected
+    int  sel_cell_x     = 0;
+    int  sel_cell_y     = 0;
 };
 
 inline World MakeMockWorld() {
