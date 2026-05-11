@@ -14,4 +14,4 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/backends
 )
 
-target_link_libraries(imgui PUBLIC d3d11 dxgi d3dcompiler dwmapi)
+target_link_libraries(imgui PUBLIC d3d11 dxgi d3dcompiler dwmapi gdi32)
