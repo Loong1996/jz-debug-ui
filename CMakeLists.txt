@@ -20,6 +20,7 @@ add_executable(debug_ui_demo WIN32
     src/dui_canvas.cpp
     src/dui_inspector.cpp
     src/dui_metrics.cpp
+    src/dui_log.cpp
 )
 
 target_include_directories(debug_ui_demo PRIVATE
