@@ -30,7 +30,7 @@ void DrawInspector(World& world) {
         for (auto& e : world.entities) {
             if (static_cast<int>(e.id) != world.selected_id) continue;
             ImGui::PushID(static_cast<int>(e.id));
-            ImGui::Text(u8"已选中: %s", e.label);
+            ImGui::Text(u8"已选中: %s  [type %d]", e.label, e.type);
             if (ImGui::InputInt(u8"x 坐标", &e.x, 1, 5)) e.fx = static_cast<float>(e.x);
             if (ImGui::InputInt(u8"y 坐标", &e.y, 1, 5)) e.fy = static_cast<float>(e.y);
             ImGui::SliderFloat(u8"半径",  &e.radius, 0.1f, 1.f, "%.2f");

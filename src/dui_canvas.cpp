@@ -26,38 +26,37 @@ void DrawCanvas(World& world) {
     const int pcx = player ? player->x : 0;
     const int pcy = player ? player->y : 0;
 
-    // Isometric projection:
-    //   +X world → right-down (+1, +1) on screen
-    //   +Y world → left-down  (-1, +1) on screen
-    // tile_half (th) = half the screen-space diagonal of one cell.
-    // Visible diamond spans ±VIEW_HALF cells; extreme screen reach = VIEW_HALF*th from center.
+    // Isometric: +X → right-down, +Y → left-down
     const ImVec2 center(p0.x + sz.x * 0.5f, p0.y + sz.y * 0.5f);
-    const float th = (sz.x < sz.y ? sz.x : sz.y) * 0.5f / (VIEW_HALF + 1.5f);
+    const float  th = (sz.x < sz.y ? sz.x : sz.y) * 0.5f / (VIEW_HALF + 1.5f);
 
-    // World (float) → screen absolute position
     auto ToScreen = [&](float wx, float wy) -> ImVec2 {
-        float dx = static_cast<float>(wx - pcx), dy = static_cast<float>(wy - pcy);
+        float dx = wx - static_cast<float>(pcx);
+        float dy = wy - static_cast<float>(pcy);
         return ImVec2(center.x + (dx - dy) * th,
                       center.y + (dx + dy) * th);
     };
 
-    // Inverse: screen pixel → nearest world grid cell
     auto ToWorld = [&](ImVec2 s, int& ox, int& oy) {
         float rx = s.x - center.x, ry = s.y - center.y;
-        ox = static_cast<int>(pcx) + static_cast<int>(roundf((rx + ry) / (2.f * th)));
-        oy = static_cast<int>(pcy) + static_cast<int>(roundf((ry - rx) / (2.f * th)));
+        ox = pcx + static_cast<int>(roundf((rx + ry) / (2.f * th)));
+        oy = pcy + static_cast<int>(roundf((ry - rx) / (2.f * th)));
     };
 
-    // Diamond vertices of the tile whose world-center is at integer (wx, wy)
-    // (tile occupies world region [wx-0.5, wx+0.5] x [wy-0.5, wy+0.5])
+    // Full diamond of the cell centered at integer world (wx, wy)
     auto TileDiamond = [&](int wx, int wy, ImVec2 pts[4]) {
-        float dx = static_cast<float>(wx - pcx), dy = static_cast<float>(wy - pcy);
+        float dx = static_cast<float>(wx - pcx);
+        float dy = static_cast<float>(wy - pcy);
         float cx = center.x + (dx - dy) * th;
         float cy = center.y + (dx + dy) * th;
-        pts[0] = ImVec2(cx,      cy - th); // top
-        pts[1] = ImVec2(cx + th, cy);      // right (+X)
-        pts[2] = ImVec2(cx,      cy + th); // bottom
-        pts[3] = ImVec2(cx - th, cy);      // left  (+Y)
+        pts[0] = ImVec2(cx,      cy - th);
+        pts[1] = ImVec2(cx + th, cy);
+        pts[2] = ImVec2(cx,      cy + th);
+        pts[3] = ImVec2(cx - th, cy);
+    };
+
+    auto InView = [&](int wx, int wy) {
+        return abs(wx - pcx) <= VIEW_HALF && abs(wy - pcy) <= VIEW_HALF;
     };
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -65,39 +64,42 @@ void DrawCanvas(World& world) {
     dl->AddRectFilled(p0, p1, IM_COL32(28, 28, 32, 255));
     dl->PushClipRect(p0, p1, true);
 
-    // --- Grid lines (38 in each isometric direction) ---
-    // Lines of constant wx (run parallel to +Y axis → left-down on screen)
+    // --- 1. Map cells (background layer) ---
+    for (const auto& c : world.cells) {
+        if (!InView(c.x, c.y)) continue;
+        ImVec2 pts[4];
+        TileDiamond(c.x, c.y, pts);
+        dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], c.color);
+    }
+
+    // --- 2. Grid lines (on top of cell fills so borders stay crisp) ---
     for (int i = -VIEW_HALF; i <= VIEW_HALF + 1; ++i) {
-        float wx = pcx + i - 0.5f;
-        ImVec2 a = ToScreen(wx, pcy - VIEW_HALF - 0.5f);
-        ImVec2 b = ToScreen(wx, pcy + VIEW_HALF + 0.5f);
+        float wx = static_cast<float>(pcx + i) - 0.5f;
+        ImVec2 a = ToScreen(wx, static_cast<float>(pcy - VIEW_HALF) - 0.5f);
+        ImVec2 b = ToScreen(wx, static_cast<float>(pcy + VIEW_HALF) + 0.5f);
         dl->AddLine(a, b, IM_COL32(55, 55, 65, 255));
     }
-    // Lines of constant wy (run parallel to +X axis → right-down on screen)
     for (int j = -VIEW_HALF; j <= VIEW_HALF + 1; ++j) {
-        float wy = pcy + j - 0.5f;
-        ImVec2 a = ToScreen(pcx - VIEW_HALF - 0.5f, wy);
-        ImVec2 b = ToScreen(pcx + VIEW_HALF + 0.5f, wy);
+        float wy = static_cast<float>(pcy + j) - 0.5f;
+        ImVec2 a = ToScreen(static_cast<float>(pcx - VIEW_HALF) - 0.5f, wy);
+        ImVec2 b = ToScreen(static_cast<float>(pcx + VIEW_HALF) + 0.5f, wy);
         dl->AddLine(a, b, IM_COL32(55, 55, 65, 255));
     }
 
-    // --- Center cell highlight (player position) ---
+    // --- 3. Center cell highlight ---
     {
         ImVec2 pts[4];
         TileDiamond(pcx, pcy, pts);
         dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], IM_COL32(50, 50, 75, 255));
     }
 
-    // --- Entities ---
+    // --- 4. Entities ---
     for (const auto& e : world.entities) {
-        int dx = e.x - pcx, dy = e.y - pcy;
-        if (dx < -VIEW_HALF || dx > VIEW_HALF ||
-            dy < -VIEW_HALF || dy > VIEW_HALF) continue;
+        if (!InView(e.x, e.y)) continue;
 
         ImVec2 pts[4];
         TileDiamond(e.x, e.y, pts);
 
-        // Scale visual diamond by entity radius (fill ratio)
         float r = e.radius < 1.f ? e.radius : 1.f;
         ImVec2 cpt((pts[0].x + pts[2].x) * 0.5f, (pts[0].y + pts[2].y) * 0.5f);
         ImVec2 scaled[4];
@@ -111,7 +113,6 @@ void DrawCanvas(World& world) {
             dl->AddQuad(pts[0], pts[1], pts[2], pts[3],
                         IM_COL32(255, 230, 0, 255), 2.f);
 
-        // Label above the tile (only when tiles are large enough to read)
         if (th >= 10.f) {
             float lw = ImGui::CalcTextSize(e.label).x;
             dl->AddText(ImVec2(pts[0].x - lw * 0.5f,
@@ -120,24 +121,22 @@ void DrawCanvas(World& world) {
         }
     }
 
-    // --- Axis indicator (bottom-left corner, outside clip) ---
+    // --- 5. Axis indicator (outside clip rect) ---
     dl->PopClipRect();
     {
         const float ox = p0.x + 36.f, oy = p0.y + sz.y - 18.f;
         const float ar = 26.f, k = 0.7071f;
-        // +X: right-down
-        dl->AddLine(ImVec2(ox, oy), ImVec2(ox + ar * k, oy + ar * k),
+        dl->AddLine(ImVec2(ox, oy), ImVec2(ox + ar*k, oy + ar*k),
                     IM_COL32(240, 100, 100, 200), 1.5f);
-        dl->AddText(ImVec2(ox + ar * k + 2.f, oy + ar * k - 7.f),
+        dl->AddText(ImVec2(ox + ar*k + 2.f, oy + ar*k - 7.f),
                     IM_COL32(240, 100, 100, 200), "+X");
-        // +Y: left-down
-        dl->AddLine(ImVec2(ox, oy), ImVec2(ox - ar * k, oy + ar * k),
+        dl->AddLine(ImVec2(ox, oy), ImVec2(ox - ar*k, oy + ar*k),
                     IM_COL32(100, 210, 100, 200), 1.5f);
-        dl->AddText(ImVec2(ox - ar * k - 22.f, oy + ar * k - 7.f),
+        dl->AddText(ImVec2(ox - ar*k - 22.f, oy + ar*k - 7.f),
                     IM_COL32(100, 210, 100, 200), "+Y");
     }
 
-    // --- Click selection (inverse isometric transform) ---
+    // --- Click selection ---
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
@@ -150,19 +149,35 @@ void DrawCanvas(World& world) {
         }
     }
 
-    // --- Hover tooltip ---
+    // --- Hover tooltip: entity takes priority over cell ---
     if (hovered) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
-        if (abs(wx - pcx) <= VIEW_HALF && abs(wy - pcy) <= VIEW_HALF) {
+        if (InView(wx, wy)) {
+            bool shown = false;
             for (const auto& e : world.entities) {
                 if (e.x == wx && e.y == wy) {
                     char buf[64];
-                    std::snprintf(buf, sizeof(buf), "%s  (%d, %d)", e.label, e.x, e.y);
+                    std::snprintf(buf, sizeof(buf),
+                        u8"[type %d] %s  (%d, %d)", e.type, e.label, e.x, e.y);
                     ImGui::BeginTooltip();
                     ImGui::TextUnformatted(buf);
                     ImGui::EndTooltip();
+                    shown = true;
                     break;
+                }
+            }
+            if (!shown) {
+                for (const auto& c : world.cells) {
+                    if (c.x == wx && c.y == wy) {
+                        char buf[64];
+                        std::snprintf(buf, sizeof(buf),
+                            u8"[type %d] %s  (%d, %d)", c.type, c.label, c.x, c.y);
+                        ImGui::BeginTooltip();
+                        ImGui::TextUnformatted(buf);
+                        ImGui::EndTooltip();
+                        break;
+                    }
                 }
             }
         }

@@ -8,16 +8,25 @@ namespace dui {
 
 struct Entity {
     uint64_t id;
-    int   x,  y;   // grid position (integer coords)
-    float fx, fy;  // float accumulator — drives x/y via rounding
-    float vx, vy;  // velocity (grid units/sec)
-    float radius;  // visual fill ratio within cell (0..1)
+    int      x,  y;
+    float    fx, fy;  // float accumulator — drives x/y via rounding
+    float    vx, vy;  // velocity (grid units/sec)
+    float    radius;  // visual fill ratio within cell (0..1)
     uint32_t color;
-    char label[16];
+    uint8_t  type;    // caller-defined tag (0 = generic); UI does not interpret
+    char     label[16];
+};
+
+struct Cell {
+    int      x, y;
+    uint32_t color;   // fill color (set by caller per type)
+    uint8_t  type;    // caller-defined tag; UI shows it in tooltip
+    char     label[12]; // short name shown in tooltip, e.g. "Wall", "Water"
 };
 
 struct World {
     std::vector<Entity> entities;
+    std::vector<Cell>   cells;    // map mask layer (drawn before entities)
     int selected_id = -1;
     int player_id   = -1;
 };
@@ -30,8 +39,9 @@ inline World MakeMockWorld() {
         return static_cast<float>(seed >> 16) / 65535.f;
     };
     auto rng = [&](float lo, float hi) { return lo + lcg() * (hi - lo); };
-    auto col32 = [](uint8_t r, uint8_t g, uint8_t b) -> uint32_t {
-        return (220u << 24) | (static_cast<uint32_t>(b) << 16)
+    auto col32 = [](uint8_t r, uint8_t g, uint8_t b, uint8_t a = 220) -> uint32_t {
+        return (static_cast<uint32_t>(a) << 24)
+             | (static_cast<uint32_t>(b) << 16)
              | (static_cast<uint32_t>(g) << 8) | r;
     };
     const uint32_t palette[5] = {
@@ -41,8 +51,10 @@ inline World MakeMockWorld() {
         col32(255, 200, 50 ),
         col32(200, 80,  255),
     };
+
+    // --- entities ---
     for (int i = 0; i < 15; ++i) {
-        Entity e;
+        Entity e{};
         e.id     = static_cast<uint64_t>(1000 + i);
         e.fx     = rng(-10.f, 10.f);
         e.fy     = rng(-10.f, 10.f);
@@ -52,10 +64,34 @@ inline World MakeMockWorld() {
         e.vy     = rng(-3.f, 3.f);
         e.radius = rng(0.5f, 0.85f);
         e.color  = palette[i % 5];
+        e.type   = static_cast<uint8_t>(i % 3); // 0=generic 1=player 2=enemy (mock)
         std::snprintf(e.label, sizeof(e.label), "#%d", static_cast<int>(e.id));
         w.entities.push_back(e);
     }
     w.player_id = static_cast<int>(w.entities[0].id);
+
+    // --- mock map cells: cross-shaped walls + corner blocks ---
+    auto addCell = [&](int x, int y, uint8_t type, uint32_t color, const char* name) {
+        Cell c{};
+        c.x = x; c.y = y;
+        c.type  = type;
+        c.color = color;
+        std::snprintf(c.label, sizeof(c.label), "%s", name);
+        w.cells.push_back(c);
+    };
+    const uint32_t wall_col  = col32(90,  70,  70,  200);
+    const uint32_t water_col = col32(40,  80,  160, 160);
+    // horizontal wall strip
+    for (int x = -6; x <= -2; ++x) addCell(x,  0, 1, wall_col,  "Wall");
+    for (int x =  2; x <=  6; ++x) addCell(x,  0, 1, wall_col,  "Wall");
+    // vertical wall strip
+    for (int y = -6; y <= -2; ++y) addCell(0, y,  1, wall_col,  "Wall");
+    for (int y =  2; y <=  6; ++y) addCell(0, y,  1, wall_col,  "Wall");
+    // water patch
+    for (int x = -3; x <= -1; ++x)
+        for (int y = -3; y <= -1; ++y)
+            addCell(x, y, 2, water_col, "Water");
+
     return w;
 }
 
