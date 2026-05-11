@@ -4,12 +4,12 @@
 namespace dui {
 
 void DrawInspector(World& world) {
-    ImGui::Begin("Inspector");
+    ImGui::Begin(u8"检视器");
 
-    ImGui::Text("Entities: %d", static_cast<int>(world.entities.size()));
+    ImGui::Text(u8"实体数量: %d", static_cast<int>(world.entities.size()));
     ImGui::Separator();
 
-    if (ImGui::TreeNodeEx("Entities", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::TreeNodeEx(u8"实体列表", ImGuiTreeNodeFlags_DefaultOpen)) {
         for (auto& e : world.entities) {
             bool selected = (static_cast<int>(e.id) == world.selected_id);
             ImGuiTreeNodeFlags flags =
@@ -30,10 +30,10 @@ void DrawInspector(World& world) {
         for (auto& e : world.entities) {
             if (static_cast<int>(e.id) != world.selected_id) continue;
             ImGui::PushID(static_cast<int>(e.id));
-            ImGui::Text("Selected: %s", e.label);
-            ImGui::InputFloat("x",       &e.x,      0.1f, 1.f, "%.3f");
-            ImGui::InputFloat("y",       &e.y,      0.1f, 1.f, "%.3f");
-            ImGui::SliderFloat("radius", &e.radius, 0.1f, 3.f, "%.2f");
+            ImGui::Text(u8"已选中: %s", e.label);
+            ImGui::InputFloat(u8"x 坐标", &e.x,      0.1f, 1.f, "%.3f");
+            ImGui::InputFloat(u8"y 坐标", &e.y,      0.1f, 1.f, "%.3f");
+            ImGui::SliderFloat(u8"半径",  &e.radius, 0.1f, 3.f, "%.2f");
             ImGui::PopID();
             break;
         }

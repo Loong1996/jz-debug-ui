@@ -29,6 +29,10 @@ target_include_directories(debug_ui_demo PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/implot
 )
 
+target_compile_options(debug_ui_demo PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+)
+
 target_link_libraries(debug_ui_demo PRIVATE
     imgui
     implot

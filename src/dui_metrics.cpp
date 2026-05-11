@@ -5,9 +5,9 @@
 namespace dui {
 
 void DrawMetrics(const Metrics& m) {
-    if (ImGui::Begin("Metrics")) {
-        if (ImPlot::BeginPlot("Tick Time (ms)", ImVec2(-1, 150))) {
-            ImPlot::SetupAxes("frame", "ms");
+    if (ImGui::Begin(u8"性能指标")) {
+        if (ImPlot::BeginPlot(u8"帧耗时 (ms)", ImVec2(-1, 150))) {
+            ImPlot::SetupAxes(u8"帧", "ms");
             ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 5.0, ImPlotCond_Always);
             ImPlot::PlotLine("tick_ms",
                 m.tick_ms.data(),
@@ -17,8 +17,8 @@ void DrawMetrics(const Metrics& m) {
             ImPlot::EndPlot();
         }
 
-        if (ImPlot::BeginPlot("Entity Count", ImVec2(-1, 150))) {
-            ImPlot::SetupAxes("frame", "count");
+        if (ImPlot::BeginPlot(u8"实体数量", ImVec2(-1, 150))) {
+            ImPlot::SetupAxes(u8"帧", u8"数量");
             ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 20.0, ImPlotCond_Always);
             ImPlot::PlotLine("entities",
                 m.entity_count.data(),

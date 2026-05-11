@@ -14,7 +14,7 @@ ImVec2 WorldToScreen(float wx, float wy, const Camera& cam,
 }
 
 void DrawCanvas(World& world, Camera& cam) {
-    ImGui::Begin("Scene");
+    ImGui::Begin(u8"场景视图");
 
     ImVec2 p0 = ImGui::GetCursorScreenPos();
     ImVec2 sz = ImGui::GetContentRegionAvail();
