@@ -1,12 +1,8 @@
 #include "dui_app.h"
-#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 #include <implot.h>
-
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
-    HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 namespace dui {
 
@@ -25,7 +21,10 @@ bool App::Init(int width, int height, const wchar_t* title) {
     wc.hInstance     = GetModuleHandleW(nullptr);
     wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = L"DuiWindow";
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        DWORD err = GetLastError();
+        if (err != ERROR_CLASS_ALREADY_EXISTS) return false;
+    }
 
     RECT r = { 0, 0, width, height };
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
@@ -37,7 +36,12 @@ bool App::Init(int width, int height, const wchar_t* title) {
         nullptr, nullptr,
         GetModuleHandleW(nullptr), nullptr);
 
-    if (!hwnd_ || !CreateDeviceD3D(hwnd_)) return false;
+    if (!hwnd_ || !CreateDeviceD3D(hwnd_)) {
+        if (hwnd_) { DestroyWindow(hwnd_); hwnd_ = nullptr; }
+        UnregisterClassW(L"DuiWindow", GetModuleHandleW(nullptr));
+        g_app_instance = nullptr;
+        return false;
+    }
 
     ShowWindow(hwnd_, SW_SHOWDEFAULT);
     UpdateWindow(hwnd_);
@@ -77,8 +81,8 @@ bool App::PumpMessages() {
 }
 
 void App::BeginFrame() {
-    ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
+    ImGui_ImplDX11_NewFrame();
     ImGui::NewFrame();
 }
 

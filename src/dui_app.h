@@ -10,6 +10,9 @@ public:
     App();
     ~App();
 
+    App(const App&) = delete;
+    App& operator=(const App&) = delete;
+
     bool Init(int width, int height, const wchar_t* title);
     void Shutdown();
     bool PumpMessages();   // returns false when WM_QUIT received
