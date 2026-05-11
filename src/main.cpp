@@ -11,7 +11,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     if (!app.Init(1280, 720, L"Debug UI Demo")) return 1;
 
     dui::World   world   = dui::MakeMockWorld();
-    dui::Camera  cam;
     dui::Metrics metrics;
 
     using Clock = std::chrono::steady_clock;
@@ -36,7 +35,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             last_ui = now;
             app.BeginFrame();
             dui::DrawInspector(world);
-            dui::DrawCanvas(world, cam);
+            dui::DrawCanvas(world);
             dui::DrawMetrics(metrics);
             app.EndFrame();
         }

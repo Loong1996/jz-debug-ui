@@ -31,9 +31,9 @@ void DrawInspector(World& world) {
             if (static_cast<int>(e.id) != world.selected_id) continue;
             ImGui::PushID(static_cast<int>(e.id));
             ImGui::Text(u8"已选中: %s", e.label);
-            ImGui::InputFloat(u8"x 坐标", &e.x,      0.1f, 1.f, "%.3f");
-            ImGui::InputFloat(u8"y 坐标", &e.y,      0.1f, 1.f, "%.3f");
-            ImGui::SliderFloat(u8"半径",  &e.radius, 0.1f, 3.f, "%.2f");
+            if (ImGui::InputInt(u8"x 坐标", &e.x, 1, 5)) e.fx = static_cast<float>(e.x);
+            if (ImGui::InputInt(u8"y 坐标", &e.y, 1, 5)) e.fy = static_cast<float>(e.y);
+            ImGui::SliderFloat(u8"半径",  &e.radius, 0.1f, 1.f, "%.2f");
             ImGui::PopID();
             break;
         }
