@@ -4,6 +4,9 @@
 #include <imgui_impl_dx11.h>
 #include <implot.h>
 
+// Forward declare the WndProc handler (declared in imgui_impl_win32.h but inside #if 0)
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 namespace dui {
 
 static App* g_app_instance = nullptr;
