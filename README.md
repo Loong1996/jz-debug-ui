@@ -61,7 +61,7 @@ int WINAPI WinMain(...) {
 
 ### 独立窗口模式（Init）
 
-dui 自己创建窗口和 D3D11 设备，适合独立调试工具或快速原型。
+dui 自己创建窗口和 D3D11 设备，适合独立调试工具或快速原型，也适合 MFC / 其他引擎游戏以独立调试窗口形式接入。
 
 ```cpp
 dui::App app;
@@ -78,6 +78,52 @@ while (app.Tick([&]() {
 ```
 
 `Tick` 内部按顺序执行：`PumpMessages → BeginFrame → draw_fn → EndFrame + Present`。
+
+`PumpMessages` 只处理 dui 自己窗口的消息，不会干扰宿主程序（MFC 等）的消息循环。
+
+#### 在 MFC 游戏里调用
+
+在 `OnIdle` 或定时器回调里同步数据并驱动 dui：
+
+```cpp
+// CMyApp 或 CMyView 里，持有这两个成员：
+dui::App   m_dui_app;
+dui::World m_dui_world;
+
+// 初始化（InitInstance 或 OnCreate）：
+m_dui_app.Init(1280, 720, L"Game Debug");
+dui::RegisterCommand(u8"World/重置", [&]() { /* ... */ });
+
+// OnIdle / WM_TIMER / 游戏帧回调：
+void CMyApp::OnGameTick(float dt) {
+    // 1. 把游戏数据同步进 dui::World
+    m_dui_world.entities.clear();
+    for (auto& u : m_game.units) {
+        dui::Entity e{};
+        e.id       = u.id;
+        e.x        = u.grid_x;
+        e.y        = u.grid_y;
+        e.color    = u.color;
+        e.type     = (uint8_t)u.type;
+        e.userdata = &u;          // 可在 RegisterEntityDrawer 里强转回来
+        snprintf(e.label, sizeof(e.label), "%s", u.name.c_str());
+        m_dui_world.entities.push_back(e);
+    }
+    m_dui_world.player_id = m_game.player_id;
+
+    // 2. 驱动 dui 渲染（Tick 返回 false 说明 dui 窗口被关闭）
+    m_dui_app.Tick([&]() {
+        dui::DrawCanvas(m_dui_world);
+        dui::DrawInspector(m_dui_world);
+        dui::DrawLog();
+        dui::DrawWatch();
+        dui::DrawCommands();
+    });
+
+    // 3. 照常推送 Watch / Log 数据
+    dui::Watch(u8"entities", (int)m_game.units.size());
+}
+```
 
 ### 注入式模式（Attach）
 
