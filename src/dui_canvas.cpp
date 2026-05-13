@@ -2,6 +2,7 @@
 #include <imgui.h>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 namespace dui {
 
@@ -216,37 +217,48 @@ void DrawCanvas(World& world, CanvasView* view) {
                     IM_COL32(100, 210, 100, 200), "+Y");
     }
 
-    // --- Click selection: entity > cell > clear ---
-    // s_lmb_pan: left drag started on empty space → pan camera
-    static bool s_lmb_pan = false;
+    // --- Click selection with overlap popup ---
+    struct Hit { int kind; int index; };  // kind: 0=Entity  1=Cell
+    static bool s_lmb_pan   = false;
+    static int  s_popup_wx  = 0, s_popup_wy = 0;
+    static int  s_popup_nhits = 0;
+    static Hit  s_popup_hits[32];
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
-        world.selected_id    = -1;
-        world.sel_cell_valid = false;
-        s_lmb_pan = true;
-        bool hit = false;
-        for (const auto& e : world.entities) {
-            if (e.x == wx && e.y == wy) {
+        s_lmb_pan = false;
+
+        Hit  hits[32];
+        int  nhits = 0;
+        for (int i = 0; i < static_cast<int>(world.entities.size()) && nhits < 32; ++i)
+            if (world.entities[i].x == wx && world.entities[i].y == wy)
+                hits[nhits++] = { 0, i };
+        for (int i = 0; i < static_cast<int>(world.cells.size()) && nhits < 32; ++i)
+            if (world.cells[i].x == wx && world.cells[i].y == wy)
+                hits[nhits++] = { 1, i };
+
+        if (nhits == 0) {
+            s_lmb_pan = true;
+        } else if (nhits == 1) {
+            if (hits[0].kind == 0) {
+                const auto& e   = world.entities[hits[0].index];
                 world.selected_id   = static_cast<int>(e.id);
                 view->cam_x         = e.x;
                 view->cam_y         = e.y;
                 view->follow_player = true;
-                s_lmb_pan = false;
-                hit = true;
-                break;
+            } else {
+                const auto& c        = world.cells[hits[0].index];
+                world.sel_cell_valid = true;
+                world.sel_cell_x     = c.x;
+                world.sel_cell_y     = c.y;
             }
-        }
-        if (!hit) {
-            for (const auto& c : world.cells) {
-                if (c.x == wx && c.y == wy) {
-                    world.sel_cell_valid = true;
-                    world.sel_cell_x     = wx;
-                    world.sel_cell_y     = wy;
-                    break;
-                }
-            }
+        } else {
+            s_popup_wx    = wx;
+            s_popup_wy    = wy;
+            s_popup_nhits = nhits;
+            std::memcpy(s_popup_hits, hits, sizeof(Hit) * static_cast<size_t>(nhits));
+            ImGui::OpenPopup("##overlap_pick");
         }
     }
 
@@ -266,36 +278,63 @@ void DrawCanvas(World& world, CanvasView* view) {
         s_lrem_x = s_lrem_y = 0.f;
     }
 
-    // --- Hover tooltip: entity takes priority over cell ---
+    // --- Overlap selection popup ---
+    if (ImGui::BeginPopup("##overlap_pick")) {
+        ImGui::TextDisabled(u8"(%d, %d)  —  %d 个对象", s_popup_wx, s_popup_wy, s_popup_nhits);
+        ImGui::Separator();
+        for (int i = 0; i < s_popup_nhits; ++i) {
+            const Hit& h = s_popup_hits[i];
+            char buf[96];
+            if (h.kind == 0) {
+                const auto& e = world.entities[h.index];
+                std::snprintf(buf, sizeof(buf), u8"[E type %d] %s", e.type, e.label);
+            } else {
+                const auto& c = world.cells[h.index];
+                std::snprintf(buf, sizeof(buf), u8"[C type %d] %s", c.type, c.label);
+            }
+            ImGui::PushID(i);
+            if (ImGui::Selectable(buf)) {
+                if (h.kind == 0) {
+                    const auto& e       = world.entities[h.index];
+                    world.selected_id   = static_cast<int>(e.id);
+                    view->cam_x         = e.x;
+                    view->cam_y         = e.y;
+                    view->follow_player = true;
+                } else {
+                    const auto& c        = world.cells[h.index];
+                    world.sel_cell_valid = true;
+                    world.sel_cell_x     = c.x;
+                    world.sel_cell_y     = c.y;
+                }
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+
+    // --- Hover tooltip: all entities and cells at hovered position ---
     if (hovered) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
         if (InView(wx, wy)) {
-            bool shown = false;
-            for (const auto& e : world.entities) {
-                if (e.x == wx && e.y == wy) {
-                    char buf[64];
-                    std::snprintf(buf, sizeof(buf),
-                        u8"[type %d] %s  (%d, %d)", e.type, e.label, e.x, e.y);
-                    ImGui::BeginTooltip();
-                    ImGui::TextUnformatted(buf);
-                    ImGui::EndTooltip();
-                    shown = true;
-                    break;
-                }
-            }
-            if (!shown) {
-                for (const auto& c : world.cells) {
-                    if (c.x == wx && c.y == wy) {
-                        char buf[64];
-                        std::snprintf(buf, sizeof(buf),
-                            u8"[type %d] %s  (%d, %d)", c.type, c.label, c.x, c.y);
-                        ImGui::BeginTooltip();
-                        ImGui::TextUnformatted(buf);
-                        ImGui::EndTooltip();
-                        break;
-                    }
-                }
+            bool any = false;
+            for (const auto& e : world.entities)
+                if (e.x == wx && e.y == wy) { any = true; break; }
+            if (!any)
+                for (const auto& c : world.cells)
+                    if (c.x == wx && c.y == wy) { any = true; break; }
+            if (any) {
+                ImGui::BeginTooltip();
+                ImGui::Text("(%d, %d)", wx, wy);
+                ImGui::Separator();
+                for (const auto& e : world.entities)
+                    if (e.x == wx && e.y == wy)
+                        ImGui::Text(u8"[E type %d] %s", e.type, e.label);
+                for (const auto& c : world.cells)
+                    if (c.x == wx && c.y == wy)
+                        ImGui::Text(u8"[C type %d] %s", c.type, c.label);
+                ImGui::EndTooltip();
             }
         }
     }

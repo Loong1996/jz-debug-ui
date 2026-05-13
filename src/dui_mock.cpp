@@ -60,6 +60,9 @@ World MakeMockWorld() {
         for (int y = -3; y <= -1; ++y)
             addCell(x, y, 2, water_col, "Water");
 
+    // Extra cell layered on an existing wall position to exercise overlap display
+    addCell(-6, 0, 3, col32(180, 80, 200, 180), "Trap");
+
     return w;
 }
 

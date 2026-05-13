@@ -78,6 +78,7 @@ void DrawInspector(World& world) {
     // --- Selected entity details ---
     if (world.selected_id != -1) {
         ImGui::Separator();
+        int sel_x = 0, sel_y = 0;
         for (auto& e : world.entities) {
             if (static_cast<int>(e.id) != world.selected_id) continue;
             ImGui::PushID(static_cast<int>(e.id));
@@ -87,19 +88,41 @@ void DrawInspector(World& world) {
             ImGui::SliderFloat(u8"半径",  &e.radius, 0.1f, 1.f, "%.2f");
             InvokeEntityDrawer(e);
             ImGui::PopID();
+            sel_x = e.x; sel_y = e.y;
             break;
+        }
+        // List other entities stacked at the same position
+        bool header = false;
+        for (auto& e : world.entities) {
+            if (static_cast<int>(e.id) == world.selected_id) continue;
+            if (e.x != sel_x || e.y != sel_y) continue;
+            if (!header) {
+                ImGui::Spacing();
+                ImGui::TextDisabled(u8"同坐标其他实体:");
+                header = true;
+            }
+            ImGui::PushID(static_cast<int>(e.id));
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
+            if (ImGui::Selectable(buf))
+                world.selected_id = static_cast<int>(e.id);
+            ImGui::PopID();
         }
     }
 
-    // --- Selected cell details ---
+    // --- Selected cell details (all cells at this position) ---
     if (world.sel_cell_valid) {
         ImGui::Separator();
         ImGui::Text(u8"选中格子: (%d, %d)", world.sel_cell_x, world.sel_cell_y);
+        int n = 0;
         for (auto& c : world.cells) {
             if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
+            if (n > 0) ImGui::Spacing();
+            ImGui::PushID(n);
             ImGui::Text(u8"类型: %d  名称: %s", c.type, c.label);
             InvokeCellDrawer(c);
-            break;
+            ImGui::PopID();
+            ++n;
         }
     }
 
@@ -118,7 +141,7 @@ void DrawInspector(World& world) {
                 world.sel_cell_valid = true;
                 world.sel_cell_x     = c.x;
                 world.sel_cell_y     = c.y;
-                world.selected_id    = -1;
+                // do not clear selected_id — entity and cell selections are independent
             }
             ImGui::PopID();
         }
