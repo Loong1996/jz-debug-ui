@@ -151,11 +151,15 @@ void App::Shutdown() {
 
 bool App::PumpMessages() {
     MSG msg;
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    // Filter to hwnd_ only — avoids stealing messages from a host app's message loop
+    // (e.g. MFC) when dui runs as a secondary window on the same thread.
+    while (PeekMessageW(&msg, hwnd_, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
         if (msg.message == WM_QUIT) return false;
     }
+    // WM_QUIT is posted to the thread queue (no HWND), so check separately.
+    if (PeekMessageW(&msg, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE)) return false;
     return true;
 }
 
