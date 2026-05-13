@@ -10,6 +10,7 @@
 #include "dui_log.h"
 #include "dui_ext.h"
 #include "dui_commands.h"
+#include "dui_detail.h"
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::App app;
@@ -20,9 +21,30 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
     // --- Extension point demo: custom fields for type-1 entities ---
     dui::RegisterEntityDrawer(1, [](dui::Entity& e) {
-        ImGui::Text(u8"速度 (可编辑):");
-        ImGui::SliderFloat("vx", &e.vx, -5.f, 5.f);
-        ImGui::SliderFloat("vy", &e.vy, -5.f, 5.f);
+        ImGui::Text(u8"速度: vx=%.2f  vy=%.2f", e.vx, e.vy);
+    });
+
+    // --- Detail panel demo: pre-formatted multi-line text for type-1 entities ---
+    dui::RegisterEntityDetailText(1, [](const dui::Entity& e) -> std::string {
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+            "=== \xE5\x9F\xBA\xE7\xA1\x80 ===\n"         // === 基础 ===
+            "ID    : %llu\n"
+            "Type  : %u\n"
+            "Label : %s\n"
+            "\n"
+            "=== \xE7\x89\xA9\xE7\x90\x86 ===\n"         // === 物理 ===
+            "Pos   : (%.2f, %.2f)\n"
+            "Vel   : (%.2f, %.2f)\n"
+            "Radius: %.2f\n"
+            "\n"
+            "=== \xE6\xB8\xB2\xE6\x9F\x93 ===\n"         // === 渲染 ===
+            "Color : 0x%08X\n",
+            static_cast<unsigned long long>(e.id),
+            static_cast<unsigned>(e.type), e.label,
+            e.fx, e.fy, e.vx, e.vy, e.radius,
+            static_cast<unsigned>(e.color));
+        return buf;
     });
 
     // --- Command panel demo ---
@@ -41,6 +63,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
             p.x = p.y = 0; p.fx = p.fy = 0.f;
         }
     });
+    dui::RegisterCommand(u8"Player/停止移动", [&world] {
+        if (!world.entities.empty()) {
+            auto& p = world.entities[0];
+            p.vx = p.vy = 0.f;
+            dui::Log(u8"player stopped");
+        }
+    });
 
     using Clock = std::chrono::steady_clock;
     auto  last_tick  = Clock::now();
@@ -54,6 +83,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         dui::DrawLog();
         dui::DrawWatch();
         dui::DrawCommands();
+        dui::DrawEntityDetail(world);
     })) {
         auto now = Clock::now();
         float dt = std::chrono::duration<float>(now - last_tick).count();

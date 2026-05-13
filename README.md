@@ -14,6 +14,7 @@
 - [面板一览](#面板一览)
   - [场景视图 DrawCanvas](#场景视图-drawcanvas)
   - [检视器 DrawInspector](#检视器-drawinspector)
+  - [实体详情 DrawEntityDetail](#实体详情-drawentitydetail)
   - [Metrics DrawMetrics](#metrics-drawmetrics)
   - [日志 DrawLog](#日志-drawlog)
   - [监视 DrawWatch](#监视-drawwatch)
@@ -250,6 +251,42 @@ dui::DrawInspector(world);
 - 实体列表：点击选中/取消；选中后下方展示 x/y/radius 可编辑字段及[自定义扩展字段](#entitycell-自定义字段)
 - 地图格子折叠列表：点击选中，在场景视图上高亮金框
 
+### 实体详情 DrawEntityDetail
+
+```cpp
+#include "dui_detail.h"
+
+// 启动时注册（同 type 重复注册会覆盖）
+dui::RegisterEntityDetailText(/*type=*/1, [](const dui::Entity& e) -> std::string {
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+        "=== 基础 ===\n"
+        "ID    : %llu\n"
+        "Type  : %u\n"
+        "Label : %s\n"
+        "\n"
+        "=== 物理 ===\n"
+        "Pos   : (%.2f, %.2f)\n"
+        "Vel   : (%.2f, %.2f)\n",
+        (unsigned long long)e.id, (unsigned)e.type, e.label,
+        e.fx, e.fy, e.vx, e.vy);
+    return buf;
+});
+
+// 在 Tick 回调里绘制面板：
+dui::DrawEntityDetail(world);
+```
+
+当选中实体的 type 注册了 `EntityDetailTextFn` 时，面板头部显示内置字段（id / type / 坐标 / 半径），其下可滚动区域展示回调返回的多行文本。
+
+**与 RegisterEntityDrawer 的区别：**
+
+| | RegisterEntityDrawer | RegisterEntityDetailText |
+|---|---|---|
+| 位置 | Inspector 详情区（行内） | 独立面板 |
+| 适用 | 少量字段 + 可交互控件 | 大量字段、纯查看 |
+| 格式 | 逐行 ImGui 控件 | 自己排版好的多行字符串 |
+
 ### Metrics DrawMetrics
 
 ```cpp
@@ -400,7 +437,8 @@ src/
   dui_inspector.h / .cpp  检视器面板
   dui_metrics.h / .cpp    性能图表面板
   dui_log.h / .cpp        日志面板 + Log* API
-  dui_ext.h / .cpp        Entity / Cell 自定义字段扩展点
+  dui_ext.h / .cpp        Entity / Cell 自定义字段扩展点（Inspector 行内）
+  dui_detail.h / .cpp     实体详情面板 + RegisterEntityDetailText API
   dui_commands.h / .cpp   命令面板 + RegisterCommand API
   main.cpp                演示程序入口
 third_party/

@@ -10,8 +10,8 @@ struct CanvasView {
     bool show_labels   = true;
     bool show_axis     = true;
     bool follow_player = true;
-    int  cam_x = 0;
-    int  cam_y = 0;
+    float cam_x = 0.f;
+    float cam_y = 0.f;
 };
 
 // view == nullptr uses an internal static default instance.

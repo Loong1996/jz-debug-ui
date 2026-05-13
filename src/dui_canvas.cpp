@@ -33,8 +33,8 @@ void DrawCanvas(World& world, CanvasView* view) {
     if (ImGui::RadioButton(u8"自由", !view->follow_player))  view->follow_player = false;
     ImGui::SameLine();
     if (ImGui::Button(u8"重置") && player) {
-        view->cam_x = player->x;
-        view->cam_y = player->y;
+        view->cam_x = player->fx;
+        view->cam_y = player->fy;
     }
     ImGui::PopStyleVar();
 
@@ -46,7 +46,7 @@ void DrawCanvas(World& world, CanvasView* view) {
                 if (static_cast<int>(e.id) == world.selected_id) { target = &e; break; }
         }
         if (!target) target = player;
-        if (target) { view->cam_x = target->x; view->cam_y = target->y; }
+        if (target) { view->cam_x = target->fx; view->cam_y = target->fy; }
     }
 
     // --- Canvas area ---
@@ -76,25 +76,29 @@ void DrawCanvas(World& world, CanvasView* view) {
         s_rem_x = s_rem_y = 0.f;
     }
 
-    const int ccx = view->cam_x;
-    const int ccy = view->cam_y;
+    // Float camera position for smooth sub-cell following.
+    // Integer version used only for grid/viewport boundary calculations.
+    const float fcx = view->cam_x;
+    const float fcy = view->cam_y;
+    const int   ccx = static_cast<int>(roundf(fcx));
+    const int   ccy = static_cast<int>(roundf(fcy));
 
     auto ToScreen = [&](float wx, float wy) -> ImVec2 {
-        float dx = wx - static_cast<float>(ccx);
-        float dy = wy - static_cast<float>(ccy);
+        float dx = wx - fcx;
+        float dy = wy - fcy;
         return ImVec2(center.x + (dx - dy) * th,
                       center.y + (dx + dy) * th);
     };
 
     auto ToWorld = [&](ImVec2 s, int& ox, int& oy) {
         float rx = s.x - center.x, ry = s.y - center.y;
-        ox = ccx + static_cast<int>(roundf((rx + ry) / (2.f * th)));
-        oy = ccy + static_cast<int>(roundf((ry - rx) / (2.f * th)));
+        ox = static_cast<int>(roundf(fcx + (rx + ry) / (2.f * th)));
+        oy = static_cast<int>(roundf(fcy + (ry - rx) / (2.f * th)));
     };
 
-    auto TileDiamond = [&](int wx, int wy, ImVec2 pts[4]) {
-        float dx = static_cast<float>(wx - ccx);
-        float dy = static_cast<float>(wy - ccy);
+    auto TileDiamond = [&](float wx, float wy, ImVec2 pts[4]) {
+        float dx = wx - fcx;
+        float dy = wy - fcy;
         float cx = center.x + (dx - dy) * th;
         float cy = center.y + (dx + dy) * th;
         pts[0] = ImVec2(cx,      cy - th);
@@ -116,7 +120,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     if (view->show_cells) {
         for (const auto& c : world.cells) {
             ImVec2 pts[4];
-            TileDiamond(c.x, c.y, pts);
+            TileDiamond(static_cast<float>(c.x), static_cast<float>(c.y), pts);
             dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], c.color);
         }
     }
@@ -143,14 +147,14 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- 2b. View boundary indicator (centered on tracked entity, not camera) ---
     {
         // Same priority as follow mode: selected entity > player
-        int bcx = player ? player->x : ccx;
-        int bcy = player ? player->y : ccy;
+        float bcx = player ? player->fx : fcx;
+        float bcy = player ? player->fy : fcy;
         if (world.selected_id != -1) {
             for (const auto& e : world.entities)
-                if (static_cast<int>(e.id) == world.selected_id) { bcx = e.x; bcy = e.y; break; }
+                if (static_cast<int>(e.id) == world.selected_id) { bcx = e.fx; bcy = e.fy; break; }
         }
         float hf = static_cast<float>(VIEW_HALF) + 0.5f;
-        float fx = static_cast<float>(bcx), fy = static_cast<float>(bcy);
+        float fx = bcx, fy = bcy;
         ImVec2 bnd[4] = {
             ToScreen(fx - hf, fy - hf),  // top
             ToScreen(fx + hf, fy - hf),  // right
@@ -163,7 +167,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- 3. Center cell highlight ---
     {
         ImVec2 pts[4];
-        TileDiamond(ccx, ccy, pts);
+        TileDiamond(static_cast<float>(ccx), static_cast<float>(ccy), pts);
         dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], IM_COL32(50, 50, 75, 255));
     }
 
@@ -171,7 +175,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     if (view->show_ents) {
         for (const auto& e : world.entities) {
             ImVec2 pts[4];
-            TileDiamond(e.x, e.y, pts);
+            TileDiamond(e.fx, e.fy, pts);
 
             float r = e.radius < 1.f ? e.radius : 1.f;
             ImVec2 cpt((pts[0].x + pts[2].x) * 0.5f, (pts[0].y + pts[2].y) * 0.5f);
@@ -195,11 +199,11 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
     }
 
-    // --- 5. Selected cell gold outline ---
+    // --- 5. Selected cell cyan outline (distinct from entity yellow) ---
     if (world.sel_cell_valid && InView(world.sel_cell_x, world.sel_cell_y)) {
         ImVec2 pts[4];
-        TileDiamond(world.sel_cell_x, world.sel_cell_y, pts);
-        dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(255, 230, 0, 255), 2.f);
+        TileDiamond(static_cast<float>(world.sel_cell_x), static_cast<float>(world.sel_cell_y), pts);
+        dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(50, 220, 255, 255), 2.f);
     }
 
     // --- 6. Axis indicator (outside clip rect) ---
@@ -244,8 +248,8 @@ void DrawCanvas(World& world, CanvasView* view) {
             if (hits[0].kind == 0) {
                 const auto& e   = world.entities[hits[0].index];
                 world.selected_id   = static_cast<int>(e.id);
-                view->cam_x         = e.x;
-                view->cam_y         = e.y;
+                view->cam_x         = e.fx;
+                view->cam_y         = e.fy;
                 view->follow_player = true;
             } else {
                 const auto& c        = world.cells[hits[0].index];
@@ -297,8 +301,8 @@ void DrawCanvas(World& world, CanvasView* view) {
                 if (h.kind == 0) {
                     const auto& e       = world.entities[h.index];
                     world.selected_id   = static_cast<int>(e.id);
-                    view->cam_x         = e.x;
-                    view->cam_y         = e.y;
+                    view->cam_x         = e.fx;
+                    view->cam_y         = e.fy;
                     view->follow_player = true;
                 } else {
                     const auto& c        = world.cells[h.index];

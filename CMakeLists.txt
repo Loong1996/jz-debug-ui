@@ -22,6 +22,7 @@ add_library(dui STATIC
     src/dui_log.cpp
     src/dui_ext.cpp
     src/dui_commands.cpp
+    src/dui_detail.cpp
 )
 target_include_directories(dui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src

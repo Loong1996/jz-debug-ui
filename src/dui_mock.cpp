@@ -40,7 +40,8 @@ World MakeMockWorld() {
         std::snprintf(e.label, sizeof(e.label), "#%d", static_cast<int>(e.id));
         w.entities.push_back(e);
     }
-    w.player_id = static_cast<int>(w.entities[0].id);
+    w.player_id   = static_cast<int>(w.entities[0].id);
+    w.selected_id = w.player_id;
 
     auto addCell = [&](int x, int y, uint8_t type, uint32_t color, const char* name) {
         Cell c{};
