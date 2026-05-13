@@ -1,4 +1,5 @@
 #include "dui_inspector.h"
+#include "dui_ext.h"
 #include <imgui.h>
 #include <cstring>
 #include <cstdio>
@@ -84,6 +85,7 @@ void DrawInspector(World& world) {
             if (ImGui::InputInt(u8"x 坐标", &e.x, 1, 5)) e.fx = static_cast<float>(e.x);
             if (ImGui::InputInt(u8"y 坐标", &e.y, 1, 5)) e.fy = static_cast<float>(e.y);
             ImGui::SliderFloat(u8"半径",  &e.radius, 0.1f, 1.f, "%.2f");
+            InvokeEntityDrawer(e);
             ImGui::PopID();
             break;
         }
@@ -93,9 +95,10 @@ void DrawInspector(World& world) {
     if (world.sel_cell_valid) {
         ImGui::Separator();
         ImGui::Text(u8"选中格子: (%d, %d)", world.sel_cell_x, world.sel_cell_y);
-        for (const auto& c : world.cells) {
+        for (auto& c : world.cells) {
             if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
             ImGui::Text(u8"类型: %d  名称: %s", c.type, c.label);
+            InvokeCellDrawer(c);
             break;
         }
     }

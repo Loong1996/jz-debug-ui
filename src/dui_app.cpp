@@ -3,8 +3,8 @@
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 #include <implot.h>
+#include <cstdio>
 
-// Forward declare the WndProc handler (declared in imgui_impl_win32.h but inside #if 0)
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace dui {
@@ -15,6 +15,8 @@ App::App()  = default;
 App::~App() { Shutdown(); }
 
 bool App::Init(int width, int height, const wchar_t* title) {
+    owns_device_ = true;
+    owns_window_ = true;
     g_app_instance = this;
 
     WNDCLASSEXW wc = {};
@@ -26,7 +28,11 @@ bool App::Init(int width, int height, const wchar_t* title) {
     wc.lpszClassName = L"DuiWindow";
     if (!RegisterClassExW(&wc)) {
         DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) return false;
+        if (err != ERROR_CLASS_ALREADY_EXISTS) {
+            owns_device_ = owns_window_ = false;
+            g_app_instance = nullptr;
+            return false;
+        }
     }
 
     RECT r = { 0, 0, width, height };
@@ -40,6 +46,7 @@ bool App::Init(int width, int height, const wchar_t* title) {
         GetModuleHandleW(nullptr), nullptr);
 
     if (!hwnd_ || !CreateDeviceD3D(hwnd_)) {
+        owns_device_ = owns_window_ = false;
         if (hwnd_) { DestroyWindow(hwnd_); hwnd_ = nullptr; }
         UnregisterClassW(L"DuiWindow", GetModuleHandleW(nullptr));
         g_app_instance = nullptr;
@@ -53,32 +60,92 @@ bool App::Init(int width, int height, const wchar_t* title) {
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGui::StyleColorsDark();
+    ImGui::GetIO().IniFilename = "debug_ui.ini";
 
-    ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = "debug_ui.ini";
-
-    // Load bundled Chinese font; falls back to built-in if file is missing
-    ImFont* font = io.Fonts->AddFontFromFileTTF(
-        "assets/fonts/LXGWWenKai-Regular.ttf", 18.0f, nullptr,
-        io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
-    if (!font)
-        io.Fonts->AddFontDefault();
+    InitImGui();
 
     ImGui_ImplWin32_Init(hwnd_);
     ImGui_ImplDX11_Init(device_, ctx_);
     return true;
 }
 
+bool App::Attach(HWND hwnd,
+                 ID3D11Device*        device,
+                 ID3D11DeviceContext* ctx,
+                 IDXGISwapChain*      swapchain) {
+    if (!hwnd || !device || !ctx || !swapchain) return false;
+    if (device_) return false;  // already initialized
+
+    owns_device_ = false;
+    owns_window_ = false;
+    hwnd_      = hwnd;
+    device_    = device;
+    ctx_       = ctx;
+    swapchain_ = swapchain;
+    g_app_instance = this;
+
+    CreateRenderTarget();
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImPlot::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui::GetIO().IniFilename = "debug_ui.ini";
+
+    InitImGui();
+
+    ImGui_ImplWin32_Init(hwnd_);
+    ImGui_ImplDX11_Init(device_, ctx_);
+    return true;
+}
+
+void App::SetFontPath(const char* ttf_path, float pixel_size) {
+    font_size_ = pixel_size;
+    if (ttf_path && ttf_path[0])
+        std::snprintf(font_path_, sizeof(font_path_), "%s", ttf_path);
+    else
+        font_path_[0] = '\0';
+}
+
+void App::InitImGui() {
+    ImGuiIO& io = ImGui::GetIO();
+    // In Init (self-hosted) mode, fall back to bundled demo font if no path was set.
+    const char* fp = font_path_[0] ? font_path_
+                   : (owns_window_ ? "assets/fonts/LXGWWenKai-Regular.ttf" : nullptr);
+    if (fp) {
+        ImFont* font = io.Fonts->AddFontFromFileTTF(
+            fp, font_size_, nullptr,
+            io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+        if (font) return;
+    }
+    io.Fonts->AddFontDefault();
+}
+
 void App::Shutdown() {
-    if (!hwnd_) return;
+    if (!device_) return;
+
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
-    DestroyDeviceD3D();
-    DestroyWindow(hwnd_);
-    UnregisterClassW(L"DuiWindow", GetModuleHandleW(nullptr));
-    hwnd_ = nullptr;
+
+    DestroyRenderTarget();
+
+    if (owns_device_) {
+        if (swapchain_) { swapchain_->Release(); swapchain_ = nullptr; }
+        if (ctx_)       { ctx_->Release();       ctx_       = nullptr; }
+        device_->Release();                       device_    = nullptr;
+    } else {
+        swapchain_ = nullptr;
+        ctx_       = nullptr;
+        device_    = nullptr;
+    }
+
+    if (owns_window_) {
+        DestroyWindow(hwnd_);
+        UnregisterClassW(L"DuiWindow", GetModuleHandleW(nullptr));
+    }
+    hwnd_          = nullptr;
     g_app_instance = nullptr;
 }
 
@@ -104,7 +171,20 @@ void App::EndFrame() {
     ctx_->OMSetRenderTargets(1, &rtv_, nullptr);
     ctx_->ClearRenderTargetView(rtv_, clear);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-    swapchain_->Present(1, 0);
+    if (owns_device_) swapchain_->Present(1, 0);
+}
+
+bool App::Tick(const std::function<void()>& draw_fn) {
+    if (!PumpMessages()) return false;
+    BeginFrame();
+    draw_fn();
+    EndFrame();
+    return true;
+}
+
+void App::RebuildRenderTarget() {
+    DestroyRenderTarget();
+    CreateRenderTarget();
 }
 
 bool App::CreateDeviceD3D(HWND hwnd) {
@@ -130,13 +210,6 @@ bool App::CreateDeviceD3D(HWND hwnd) {
     if (FAILED(hr)) return false;
     CreateRenderTarget();
     return true;
-}
-
-void App::DestroyDeviceD3D() {
-    DestroyRenderTarget();
-    if (swapchain_) { swapchain_->Release(); swapchain_ = nullptr; }
-    if (ctx_)       { ctx_->Release();       ctx_       = nullptr; }
-    if (device_)    { device_->Release();    device_    = nullptr; }
 }
 
 void App::CreateRenderTarget() {
@@ -171,14 +244,6 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-bool App::Tick(const std::function<void()>& draw_fn) {
-    if (!PumpMessages()) return false;
-    BeginFrame();
-    draw_fn();
-    EndFrame();
-    return true;
 }
 
 } // namespace dui

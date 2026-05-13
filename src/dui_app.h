@@ -14,14 +14,34 @@ public:
     App(const App&) = delete;
     App& operator=(const App&) = delete;
 
+    // Self-hosted path: creates its own window and D3D11 device.
     bool Init(int width, int height, const wchar_t* title);
+
+    // Injection path: attaches to a game's existing window and device.
+    // The caller is responsible for:
+    //   - forwarding WndProc messages to ImGui_ImplWin32_WndProcHandler
+    //   - calling Present after EndFrame (EndFrame skips Present in this mode)
+    //   - calling RebuildRenderTarget() after a swap chain resize
+    // Call SetFontPath() before Attach() to load a custom font.
+    bool Attach(HWND hwnd,
+                ID3D11Device*        device,
+                ID3D11DeviceContext* ctx,
+                IDXGISwapChain*      swapchain);
+
+    // Configure font before Init/Attach. Pass nullptr to use the ImGui built-in font.
+    void SetFontPath(const char* ttf_path, float pixel_size = 18.f);
+
+    // Rebuild the render-target view from the current swap chain back buffer.
+    // Call this after a swap chain resize when using Attach mode.
+    void RebuildRenderTarget();
+
     void Shutdown();
     bool PumpMessages();   // returns false when WM_QUIT received
     void BeginFrame();
-    void EndFrame();       // ImGui::Render + DX11 Present
+    void EndFrame();       // ImGui::Render + DX11 draw; Present only in Init mode
 
-    // Single-call convenience: PumpMessages + BeginFrame + draw_fn() + EndFrame.
-    // Returns false when WM_QUIT is received (same as PumpMessages).
+    // Convenience: PumpMessages + BeginFrame + draw_fn() + EndFrame.
+    // Only valid in Init (self-hosted) mode.
     bool Tick(const std::function<void()>& draw_fn);
 
 private:
@@ -31,8 +51,13 @@ private:
     IDXGISwapChain*         swapchain_ = nullptr;
     ID3D11RenderTargetView* rtv_       = nullptr;
 
+    bool owns_device_ = false;
+    bool owns_window_ = false;
+    char  font_path_[512] = {};
+    float font_size_      = 18.f;
+
+    void InitImGui();
     bool CreateDeviceD3D(HWND hwnd);
-    void DestroyDeviceD3D();
     void CreateRenderTarget();
     void DestroyRenderTarget();
 
