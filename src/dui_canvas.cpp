@@ -111,30 +111,52 @@ void DrawCanvas(World& world, CanvasView* view) {
     dl->AddRectFilled(p0, p1, IM_COL32(28, 28, 32, 255));
     dl->PushClipRect(p0, p1, true);
 
-    // --- 1. Map cells ---
+    // --- 1. Map cells (render all, not just in-view) ---
     if (view->show_cells) {
         for (const auto& c : world.cells) {
-            if (!InView(c.x, c.y)) continue;
             ImVec2 pts[4];
             TileDiamond(c.x, c.y, pts);
             dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], c.color);
         }
     }
 
-    // --- 2. Grid lines ---
+    // --- 2. Grid lines (full canvas extent) ---
     if (view->show_grid) {
-        for (int i = -VIEW_HALF; i <= VIEW_HALF + 1; ++i) {
-            float wx = static_cast<float>(ccx + i) - 0.5f;
-            ImVec2 a = ToScreen(wx, static_cast<float>(ccy - VIEW_HALF) - 0.5f);
-            ImVec2 b = ToScreen(wx, static_cast<float>(ccy + VIEW_HALF) + 0.5f);
+        // How many grid cells fit across the canvas in each isometric axis direction.
+        // A column at world x = wx is visible when |(wx-ccx)*th| < (sz.x+sz.y)/2.
+        int gr = static_cast<int>((sz.x + sz.y) / (2.f * th)) + 2;
+        for (int i = ccx - gr; i <= ccx + gr + 1; ++i) {
+            float wx = static_cast<float>(i) - 0.5f;
+            ImVec2 a = ToScreen(wx, static_cast<float>(ccy - gr) - 0.5f);
+            ImVec2 b = ToScreen(wx, static_cast<float>(ccy + gr) + 0.5f);
             dl->AddLine(a, b, IM_COL32(55, 55, 65, 255));
         }
-        for (int j = -VIEW_HALF; j <= VIEW_HALF + 1; ++j) {
-            float wy = static_cast<float>(ccy + j) - 0.5f;
-            ImVec2 a = ToScreen(static_cast<float>(ccx - VIEW_HALF) - 0.5f, wy);
-            ImVec2 b = ToScreen(static_cast<float>(ccx + VIEW_HALF) + 0.5f, wy);
+        for (int j = ccy - gr; j <= ccy + gr + 1; ++j) {
+            float wy = static_cast<float>(j) - 0.5f;
+            ImVec2 a = ToScreen(static_cast<float>(ccx - gr) - 0.5f, wy);
+            ImVec2 b = ToScreen(static_cast<float>(ccx + gr) + 0.5f, wy);
             dl->AddLine(a, b, IM_COL32(55, 55, 65, 255));
         }
+    }
+
+    // --- 2b. View boundary indicator (centered on tracked entity, not camera) ---
+    {
+        // Same priority as follow mode: selected entity > player
+        int bcx = player ? player->x : ccx;
+        int bcy = player ? player->y : ccy;
+        if (world.selected_id != -1) {
+            for (const auto& e : world.entities)
+                if (static_cast<int>(e.id) == world.selected_id) { bcx = e.x; bcy = e.y; break; }
+        }
+        float hf = static_cast<float>(VIEW_HALF) + 0.5f;
+        float fx = static_cast<float>(bcx), fy = static_cast<float>(bcy);
+        ImVec2 bnd[4] = {
+            ToScreen(fx - hf, fy - hf),  // top
+            ToScreen(fx + hf, fy - hf),  // right
+            ToScreen(fx + hf, fy + hf),  // bottom
+            ToScreen(fx - hf, fy + hf),  // left
+        };
+        dl->AddQuad(bnd[0], bnd[1], bnd[2], bnd[3], IM_COL32(255, 140, 0, 220), 2.f);
     }
 
     // --- 3. Center cell highlight ---
@@ -147,8 +169,6 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- 4. Entities ---
     if (view->show_ents) {
         for (const auto& e : world.entities) {
-            if (!InView(e.x, e.y)) continue;
-
             ImVec2 pts[4];
             TileDiamond(e.x, e.y, pts);
 
@@ -197,15 +217,23 @@ void DrawCanvas(World& world, CanvasView* view) {
     }
 
     // --- Click selection: entity > cell > clear ---
+    // s_lmb_pan: left drag started on empty space → pan camera
+    static bool s_lmb_pan = false;
+
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
         world.selected_id    = -1;
         world.sel_cell_valid = false;
+        s_lmb_pan = true;
         bool hit = false;
         for (const auto& e : world.entities) {
             if (e.x == wx && e.y == wy) {
-                world.selected_id = static_cast<int>(e.id);
+                world.selected_id   = static_cast<int>(e.id);
+                view->cam_x         = e.x;
+                view->cam_y         = e.y;
+                view->follow_player = true;
+                s_lmb_pan = false;
                 hit = true;
                 break;
             }
@@ -220,6 +248,22 @@ void DrawCanvas(World& world, CanvasView* view) {
                 }
             }
         }
+    }
+
+    // Left-drag on background pans camera (same math as right-drag, separate accumulator)
+    static float s_lrem_x = 0.f, s_lrem_y = 0.f;
+    if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && s_lmb_pan) {
+        view->follow_player = false;
+        ImVec2 md = ImGui::GetIO().MouseDelta;
+        s_lrem_x -= (md.x + md.y) / (2.f * th);
+        s_lrem_y -= (md.y - md.x) / (2.f * th);
+        int ix = static_cast<int>(s_lrem_x); view->cam_x += ix; s_lrem_x -= static_cast<float>(ix);
+        int iy = static_cast<int>(s_lrem_y); view->cam_y += iy; s_lrem_y -= static_cast<float>(iy);
+    }
+
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        s_lmb_pan  = false;
+        s_lrem_x = s_lrem_y = 0.f;
     }
 
     // --- Hover tooltip: entity takes priority over cell ---
