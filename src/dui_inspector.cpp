@@ -124,6 +124,23 @@ void DrawInspector(World& world) {
             ImGui::PopID();
             ++n;
         }
+        // Entities currently standing on the selected cell
+        bool ent_header = false;
+        for (auto& e : world.entities) {
+            if (e.x != world.sel_cell_x || e.y != world.sel_cell_y) continue;
+            if (!ent_header) {
+                ImGui::Spacing();
+                ImGui::TextDisabled(u8"压在此格的实体:");
+                ent_header = true;
+            }
+            bool is_sel = (static_cast<int>(e.id) == world.selected_id);
+            ImGui::PushID(static_cast<int>(e.id));
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
+            if (ImGui::Selectable(buf, is_sel))
+                world.selected_id = is_sel ? -1 : static_cast<int>(e.id);
+            ImGui::PopID();
+        }
     }
 
     // --- Cell list ---
