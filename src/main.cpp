@@ -97,7 +97,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         static bool layout_inited = false;
         if (!layout_inited) {
             layout_inited = true;
-            if (ImGui::DockBuilderGetNode(dsid) == nullptr) {
+            ImGuiDockNode* node = ImGui::DockBuilderGetNode(dsid);
+            if (node == nullptr || node->IsLeafNode()) {
                 ImGui::DockBuilderRemoveNode(dsid);
                 ImGui::DockBuilderAddNode(dsid, ImGuiDockNodeFlags_DockSpace);
                 ImGui::DockBuilderSetNodeSize(dsid, ImGui::GetMainViewport()->Size);
