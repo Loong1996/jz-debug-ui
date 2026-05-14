@@ -171,11 +171,20 @@ void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
         if (ecnt % 7 == 0) PushEvent("System", u8"区块加载完成");
     }
 
-    Watch(u8"实体数", static_cast<int>(world.entities.size()));
+    Watch(u8"默认/实体数", static_cast<int>(world.entities.size()));
     if (!world.entities.empty()) {
-        Watch(u8"player_x", world.entities[0].x);
-        Watch(u8"player_y", world.entities[0].y);
+        Watch("player/x",  world.entities[0].fx);
+        Watch("player/y",  world.entities[0].fy);
+        Watch("player/vx", world.entities[0].vx);
+        Watch("player/vy", world.entities[0].vy);
     }
+    static float mem_acc = 0.f;
+    mem_acc += dt;
+    if (mem_acc >= 0.5f) {
+        mem_acc = 0.f;
+        Watch("mem/heap_kb", static_cast<float>(world.entities.size() * 128 + 4096));
+    }
+    Watch("ai/state", (tick_count % 7 < 3) ? "patrol" : "chase");
 }
 
 } // namespace demo

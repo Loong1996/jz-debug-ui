@@ -14,6 +14,9 @@ void Watch(const char* name, float       v);
 void Watch(const char* name, bool        v);
 void Watch(const char* name, const char* v);
 
+void RemoveWatch(const char* name);
+void ClearWatch();
+
 void DrawLog();
 void DrawWatch();
 

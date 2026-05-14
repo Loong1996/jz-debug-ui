@@ -1,5 +1,7 @@
 #pragma once
 #include <functional>
+#include <string>
+#include <vector>
 
 namespace dui {
 
@@ -44,5 +46,18 @@ void RegisterCommandWithArgs(const char* name,
                              CommandFnArgs fn);
 
 void DrawCommands();  // ImGui panel
+
+// ---- Search / global access ----
+
+struct CommandInfo {
+    std::string name;
+    bool        has_args;
+    int         index;   // index in internal g_cmds or g_cmds_args
+};
+void GetAllCommands(std::vector<CommandInfo>& out);
+
+// Trigger the args-modal for a with-args command by name.
+// No-op if not found. DrawCommands() must be called this frame for the modal to appear.
+void OpenArgsModalByName(const char* name);
 
 } // namespace dui

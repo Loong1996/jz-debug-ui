@@ -27,6 +27,7 @@ add_library(dui STATIC
     src/dui_user_metrics.cpp
     src/dui_events.cpp
     src/dui_hotkeys.cpp
+    src/dui_search.cpp
 )
 target_include_directories(dui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src

@@ -27,8 +27,10 @@ struct CommandWithArgs {
     std::vector<ArgState>        state;
 };
 
-static std::vector<Command>        g_cmds;
+static std::vector<Command>         g_cmds;
 static std::vector<CommandWithArgs> g_cmds_args;
+static bool s_open_args_popup = false;
+static int  s_args_cmd_idx    = -1;
 
 // Returns category from "Cat/Name" or "" for uncategorized.
 static std::string get_cat(const std::string& name) {
@@ -147,12 +149,9 @@ void DrawCommands() {
     auto cats = collect_cats(search);
 
     // Track pending actions
-    int  to_exec      = -1;   // index into g_cmds
-    int  to_open_args = -1;   // index into g_cmds_args
-    static bool s_open_args_popup = false;
-    static int  s_args_cmd_idx    = -1;
+    int  to_exec      = -1;
     static bool s_open_capture    = false;
-    static int  s_capture_cmd_idx = -1;  // index into g_cmds (no-arg only)
+    static int  s_capture_cmd_idx = -1;
 
     for (const auto& cat : cats) {
         if (search[0]) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
@@ -349,6 +348,24 @@ void DrawCommands() {
     }
 
     ImGui::End();
+}
+
+void GetAllCommands(std::vector<CommandInfo>& out) {
+    out.clear();
+    for (int i = 0; i < static_cast<int>(g_cmds.size()); i++)
+        out.push_back({ g_cmds[i].name, false, i });
+    for (int i = 0; i < static_cast<int>(g_cmds_args.size()); i++)
+        out.push_back({ g_cmds_args[i].name, true, i });
+}
+
+void OpenArgsModalByName(const char* name) {
+    for (int i = 0; i < static_cast<int>(g_cmds_args.size()); i++) {
+        if (g_cmds_args[i].name == name) {
+            s_args_cmd_idx    = i;
+            s_open_args_popup = true;
+            return;
+        }
+    }
 }
 
 } // namespace dui

@@ -6,6 +6,7 @@
 #include "dui_commands.h"
 #include "dui_detail.h"
 #include "dui_events.h"
+#include "dui_search.h"
 
 namespace dui {
 
@@ -18,6 +19,7 @@ void DrawAll(World& world, Metrics& metrics) {
     DrawCommands();
     DrawEntityDetail(world);
     DrawEvents();
+    DrawGlobalSearch(world);
 }
 
 } // namespace dui

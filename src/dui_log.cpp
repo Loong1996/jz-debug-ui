@@ -2,6 +2,7 @@
 #include "dui_metrics.h"
 #include <imgui.h>
 #include <windows.h>
+#include <algorithm>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -20,8 +21,10 @@ struct LogEntry {
 };
 
 struct WatchEntry {
-    char name[32];
-    char value[64];
+    char  name[64];
+    char  value[64];
+    bool  is_numeric = false;
+    RingBuffer<float, 64> history;
 };
 
 static RingBuffer<LogEntry, 1000> s_log;
@@ -101,10 +104,14 @@ void LogError(const char* fmt, ...) {
 void Watch(const char* name, int v) {
     char buf[64]; std::snprintf(buf, sizeof(buf), "%d", v);
     Watch(name, static_cast<const char*>(buf));
+    for (auto& w : s_watch)
+        if (std::strcmp(w.name, name) == 0) { w.is_numeric = true; w.history.push(static_cast<float>(v)); break; }
 }
 void Watch(const char* name, float v) {
     char buf[64]; std::snprintf(buf, sizeof(buf), "%.4g", v);
     Watch(name, static_cast<const char*>(buf));
+    for (auto& w : s_watch)
+        if (std::strcmp(w.name, name) == 0) { w.is_numeric = true; w.history.push(v); break; }
 }
 void Watch(const char* name, bool v) {
     Watch(name, v ? "true" : "false");
@@ -119,7 +126,16 @@ void Watch(const char* name, const char* v) {
     WatchEntry e{};
     std::snprintf(e.name,  sizeof(e.name),  "%s", name);
     std::snprintf(e.value, sizeof(e.value), "%s", v);
-    s_watch.push_back(e);
+    s_watch.push_back(std::move(e));
+}
+
+void RemoveWatch(const char* name) {
+    s_watch.erase(std::remove_if(s_watch.begin(), s_watch.end(),
+        [name](const WatchEntry& w) { return std::strcmp(w.name, name) == 0; }),
+        s_watch.end());
+}
+void ClearWatch() {
+    s_watch.clear();
 }
 
 void DrawLog() {
@@ -215,24 +231,141 @@ void DrawLog() {
     ImGui::End();
 }
 
+static void draw_sparkline(const WatchEntry& w) {
+    int cnt = w.history.plot_count();
+    if (cnt < 2) return;
+    int off = w.history.plot_offset();
+    int cap = w.history.capacity();
+    const float* data = w.history.data();
+
+    float vmin = data[off % cap], vmax = vmin;
+    for (int i = 1; i < cnt; i++) {
+        float v = data[(off + i) % cap];
+        if (v < vmin) vmin = v;
+        if (v > vmax) vmax = v;
+    }
+
+    // Trend color from last third of samples
+    int seg = cnt / 3; if (seg < 1) seg = 1;
+    float first = data[(off + cnt - 1 - seg) % cap];
+    float last  = data[(off + cnt - 1) % cap];
+    float slope = last - first;
+    ImU32 col = slope >  0.01f * (vmax - vmin + 0.001f) ? IM_COL32(80, 220, 80, 220)
+              : slope < -0.01f * (vmax - vmin + 0.001f) ? IM_COL32(220, 80, 80, 220)
+              : IM_COL32(80, 160, 220, 220);
+
+    ImVec2 pos  = ImGui::GetCursorScreenPos();
+    float  w_px = ImGui::GetContentRegionAvail().x - 2.f;
+    float  h_px = ImGui::GetTextLineHeight() * 1.2f;
+    if (w_px < 10.f) return;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float range = vmax - vmin;
+    auto pt = [&](int i) -> ImVec2 {
+        float v = data[(off + i) % cap];
+        float nx = static_cast<float>(i) / static_cast<float>(cnt - 1);
+        float ny = (range > 0.f) ? 1.f - (v - vmin) / range : 0.5f;
+        return ImVec2(pos.x + nx * w_px, pos.y + ny * h_px);
+    };
+    for (int i = 0; i < cnt - 1; i++)
+        dl->AddLine(pt(i), pt(i + 1), col, 1.f);
+    ImVec2 tip = pt(cnt - 1);
+    dl->AddCircleFilled(tip, 2.f, col);
+
+    ImGui::Dummy(ImVec2(w_px, h_px));
+}
+
 void DrawWatch() {
     ImGui::Begin(u8"监视");
 
-    if (ImGui::BeginTable("##watch_tbl", 2,
+    if (ImGui::BeginTable("##watch_tbl", 3,
             ImGuiTableFlags_Borders     |
             ImGuiTableFlags_RowBg       |
             ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn(u8"名称", ImGuiTableColumnFlags_WidthStretch, 0.45f);
-        ImGui::TableSetupColumn(u8"值",   ImGuiTableColumnFlags_WidthStretch, 0.55f);
+        ImGui::TableSetupColumn(u8"名称", ImGuiTableColumnFlags_WidthStretch, 0.40f);
+        ImGui::TableSetupColumn(u8"值",   ImGuiTableColumnFlags_WidthStretch, 0.30f);
+        ImGui::TableSetupColumn(u8"趋势", ImGuiTableColumnFlags_WidthFixed,   80.f);
         ImGui::TableHeadersRow();
 
+        // Collect groups preserving order
+        std::vector<std::string> groups;
         for (const auto& w : s_watch) {
+            std::string g;
+            const char* slash = std::strchr(w.name, '/');
+            g = slash ? std::string(w.name, static_cast<size_t>(slash - w.name)) : u8"默认";
+            bool found = false;
+            for (const auto& gg : groups) if (gg == g) { found = true; break; }
+            if (!found) groups.push_back(g);
+        }
+
+        std::string remove_name;
+        std::string remove_group;
+
+        for (const auto& grp : groups) {
+            // Group header row
             ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(w.name);
-            ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(w.value);
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(55, 55, 78, 200));
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(55, 55, 78, 200));
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 1.0f, 1.f));
+            ImGui::TextUnformatted(grp.c_str());
+            ImGui::PopStyleColor();
+
+            ImGui::TableSetColumnIndex(2);
+            ImGui::PushID(("grp_" + grp).c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.f));
+            if (ImGui::SmallButton(u8"清空"))
+                remove_group = grp;
+            ImGui::PopStyleColor();
+            ImGui::PopID();
+
+            // Entries
+            for (int idx = 0; idx < static_cast<int>(s_watch.size()); idx++) {
+                WatchEntry& w = s_watch[idx];
+                const char* sl = std::strchr(w.name, '/');
+                std::string wg = sl ? std::string(w.name, static_cast<size_t>(sl - w.name)) : u8"默认";
+                if (wg != grp) continue;
+
+                const char* display_name = sl ? sl + 1 : w.name;
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::PushID(idx);
+                bool hovered = false;
+                ImGui::Selectable(display_name, false,
+                    ImGuiSelectableFlags_AllowOverlap, ImVec2(0, 0));
+                hovered = ImGui::IsItemHovered();
+                if (hovered) {
+                    ImGui::SameLine();
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.4f, 0.4f, 1.f));
+                    if (ImGui::SmallButton("x"))
+                        remove_name = w.name;
+                    ImGui::PopStyleColor();
+                }
+                ImGui::PopID();
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(w.value);
+
+                ImGui::TableSetColumnIndex(2);
+                if (w.is_numeric)
+                    draw_sparkline(w);
+            }
         }
 
         ImGui::EndTable();
+
+        if (!remove_name.empty()) {
+            RemoveWatch(remove_name.c_str());
+        } else if (!remove_group.empty()) {
+            s_watch.erase(std::remove_if(s_watch.begin(), s_watch.end(),
+                [&](const WatchEntry& w) {
+                    const char* sl = std::strchr(w.name, '/');
+                    std::string wg = sl ? std::string(w.name, static_cast<size_t>(sl - w.name)) : u8"默认";
+                    return wg == remove_group;
+                }), s_watch.end());
+        }
     }
 
     ImGui::End();
