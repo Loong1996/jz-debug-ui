@@ -10,6 +10,8 @@ namespace {
     std::unordered_map<uint8_t,  std::string>           g_cell_type_names;
     std::unordered_map<uint32_t, std::string>           g_map_names;
     std::unordered_map<uint8_t,  dui::EntityLabelFn>    g_label_fns;
+    uint8_t g_player_entity_type = 255;
+    bool    g_player_type_set    = false;
 }
 
 namespace dui {
@@ -69,6 +71,9 @@ void InvokeCellDrawer(Cell& c) {
     ImGui::Separator();
     it->second(c);
 }
+
+void SetPlayerEntityType(uint8_t type) { g_player_entity_type = type; g_player_type_set = true; }
+bool IsPlayerEntityType (uint8_t type) { return g_player_type_set && type == g_player_entity_type; }
 
 void RegisterEntityLabelFn(uint8_t type, EntityLabelFn fn) {
     g_label_fns[type] = std::move(fn);

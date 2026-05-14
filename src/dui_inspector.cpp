@@ -144,8 +144,8 @@ void DrawInspector(World& world) {
             for (const auto& e : world.entities) if (e.map_id == all_map_ids[i]) ++ent_cnt;
             for (const auto& c : world.cells)    if (c.map_id == all_map_ids[i]) ++cell_cnt;
             const char* mn = GetMapName(all_map_ids[i]);
-            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s (%d/%d)", mn, ent_cnt, cell_cnt);
-            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"地图 %u (%d/%d)", all_map_ids[i], ent_cnt, cell_cnt);
+            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s [%u] (%d/%d)", mn, all_map_ids[i], ent_cnt, cell_cnt);
+            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "Map %u (%d/%d)", all_map_ids[i], ent_cnt, cell_cnt);
             map_items[i] = map_bufs[i];
             if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
         }

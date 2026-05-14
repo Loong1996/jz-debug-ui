@@ -68,8 +68,8 @@ void DrawCanvas(World& world, CanvasView* view) {
         int  map_combo_idx = 0;
         for (int i = 0; i < n_all_maps; ++i) {
             const char* mn = GetMapName(all_map_ids[i]);
-            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s", mn);
-            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"地图 %u", all_map_ids[i]);
+            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s [%u]", mn, all_map_ids[i]);
+            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "Map %u", all_map_ids[i]);
             map_items[i] = map_bufs[i];
             if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
         }
@@ -345,8 +345,8 @@ void DrawCanvas(World& world, CanvasView* view) {
                 }
             }
 
-            // Player marker: downward triangle floating above entity
-            if (static_cast<int>(e.id) == world.player_id) {
+            // Player marker: downward triangle floating above all player-type entities
+            if (IsPlayerEntityType(e.type)) {
                 float ts     = fmaxf(th * 0.35f, 4.f);
                 float tip_y  = pts[0].y - ts * 0.4f;
                 float base_y = tip_y - ts * 1.2f;
@@ -392,11 +392,12 @@ void DrawCanvas(World& world, CanvasView* view) {
     {
         ImDrawList* fg  = ImGui::GetForegroundDrawList();
         const char* mn  = GetMapName(world.active_map_id);
-        char        buf[32];
-        if (!mn) { std::snprintf(buf, sizeof(buf), "Map %u", world.active_map_id); mn = buf; }
+        char        buf[48];
+        if (mn) std::snprintf(buf, sizeof(buf), "%s [%u]", mn, world.active_map_id);
+        else    std::snprintf(buf, sizeof(buf), "Map %u", world.active_map_id);
         fg->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.5f,
                     ImVec2(p0.x + 8.f, p0.y + 8.f),
-                    IM_COL32(200, 200, 220, 77), mn);
+                    IM_COL32(200, 200, 220, 77), buf);
     }
 
     // --- Cursor world coordinate HUD ---

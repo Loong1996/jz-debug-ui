@@ -38,6 +38,10 @@ void SwitchActiveMap(World& w, uint32_t new_map_id);
 void InvokeEntityDrawer(Entity& e);
 void InvokeCellDrawer  (Cell& c);
 
+// Mark a entity type as "player" — Canvas draws a yellow triangle above all matching entities.
+void SetPlayerEntityType(uint8_t type);
+bool IsPlayerEntityType (uint8_t type);
+
 // Register a function that returns the short text shown above an entity on the Canvas.
 // Returning an empty string hides the label. Unregistered types fall back to e.label.
 using EntityLabelFn = std::function<std::string(const Entity&)>;
