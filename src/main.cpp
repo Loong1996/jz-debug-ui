@@ -36,6 +36,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         ImGui::Text(u8"速度: vx=%.2f  vy=%.2f", e.vx, e.vy);
     });
 
+    // --- Canvas label demo: type 0 shows label, type 1 is hidden, type 2 falls back ---
+    dui::RegisterEntityLabelFn(0, [](const dui::Entity& e) -> std::string { return e.label; });
+    dui::RegisterEntityLabelFn(1, [](const dui::Entity&) -> std::string { return {}; });
+
     // --- Detail panel demo: pre-formatted multi-line text for type-1 entities ---
     dui::RegisterEntityDetailText(1, [](const dui::Entity& e) -> std::string {
         char buf[512];

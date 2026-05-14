@@ -2,6 +2,7 @@
 #include "dui_world.h"
 #include <functional>
 #include <cstdint>
+#include <string>
 
 namespace dui {
 
@@ -36,5 +37,11 @@ void SwitchActiveMap(World& w, uint32_t new_map_id);
 // Called by the Inspector after rendering built-in fields.
 void InvokeEntityDrawer(Entity& e);
 void InvokeCellDrawer  (Cell& c);
+
+// Register a function that returns the short text shown above an entity on the Canvas.
+// Returning an empty string hides the label. Unregistered types fall back to e.label.
+using EntityLabelFn = std::function<std::string(const Entity&)>;
+void        RegisterEntityLabelFn(uint8_t type, EntityLabelFn fn);
+std::string InvokeEntityLabel    (const Entity& e);
 
 } // namespace dui

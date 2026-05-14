@@ -12,6 +12,7 @@ struct CanvasView {
     bool follow_player = true;
     float cam_x = 0.f;
     float cam_y = 0.f;
+    float zoom  = 1.f;  // [kZoomMin, kZoomMax]
 };
 
 // view == nullptr uses an internal static default instance.

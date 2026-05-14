@@ -4,11 +4,12 @@
 #include <unordered_map>
 
 namespace {
-    std::unordered_map<uint8_t,  dui::EntityDrawer> g_entity_drawers;
-    std::unordered_map<uint8_t,  dui::CellDrawer>   g_cell_drawers;
-    std::unordered_map<uint8_t,  std::string>        g_entity_type_names;
-    std::unordered_map<uint8_t,  std::string>        g_cell_type_names;
-    std::unordered_map<uint32_t, std::string>        g_map_names;
+    std::unordered_map<uint8_t,  dui::EntityDrawer>    g_entity_drawers;
+    std::unordered_map<uint8_t,  dui::CellDrawer>      g_cell_drawers;
+    std::unordered_map<uint8_t,  std::string>           g_entity_type_names;
+    std::unordered_map<uint8_t,  std::string>           g_cell_type_names;
+    std::unordered_map<uint32_t, std::string>           g_map_names;
+    std::unordered_map<uint8_t,  dui::EntityLabelFn>    g_label_fns;
 }
 
 namespace dui {
@@ -67,6 +68,16 @@ void InvokeCellDrawer(Cell& c) {
     if (it == g_cell_drawers.end()) return;
     ImGui::Separator();
     it->second(c);
+}
+
+void RegisterEntityLabelFn(uint8_t type, EntityLabelFn fn) {
+    g_label_fns[type] = std::move(fn);
+}
+
+std::string InvokeEntityLabel(const Entity& e) {
+    auto it = g_label_fns.find(e.type);
+    if (it != g_label_fns.end()) return it->second(e);
+    return e.label;
 }
 
 } // namespace dui
