@@ -47,13 +47,71 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
                 ImVec2(0.f, ImGui::GetTextLineHeight())))
             world.selected_id = selected ? -1 : static_cast<int>(e.id);
         ImGui::SameLine(0.f, 0.f);
-        ImGui::Text("%u", static_cast<unsigned>(e.type));
+        { const char* tn = GetEntityTypeName(e.type); char fb[16];
+          if (!tn) { std::snprintf(fb, sizeof(fb), "%u", static_cast<unsigned>(e.type)); tn = fb; }
+          ImGui::TextUnformatted(tn); }
 
         ImGui::TableSetColumnIndex(1);
         ImGui::TextUnformatted(e.label);
 
         ImGui::TableSetColumnIndex(2);
         ImGui::Text("(%d,%d)", e.x, e.y);
+
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
+}
+
+// ---- Cell table: 3 cols (Type / 名称 / 坐标), Type cell tinted with cell color ----
+static void CellTableImpl(World& world, const std::vector<int>& idxs,
+                          const char* tbl_id, bool with_scroll) {
+    ImGuiTableFlags flags =
+        ImGuiTableFlags_Borders      |
+        ImGuiTableFlags_RowBg        |
+        ImGuiTableFlags_SizingFixedFit;
+    if (with_scroll) flags |= ImGuiTableFlags_ScrollY;
+    float h = with_scroll ? 220.f : 0.f;
+
+    if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, h)))
+        return;
+
+    if (with_scroll) ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   44.f);
+    ImGui::TableSetupColumn(u8"名称", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn(u8"坐标", ImGuiTableColumnFlags_WidthFixed,   72.f);
+    ImGui::TableHeadersRow();
+
+    for (int i : idxs) {
+        auto& c = world.cells[i];
+        bool selected = world.sel_cell_valid &&
+                        world.sel_cell_x == c.x && world.sel_cell_y == c.y;
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+
+        ImVec4 c4 = ImGui::ColorConvertU32ToFloat4(c.color);
+        c4.w = 0.4f;
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg,
+                               ImGui::ColorConvertFloat4ToU32(c4));
+
+        ImGui::PushID(i);
+        if (ImGui::Selectable("##crow", selected,
+                ImGuiSelectableFlags_SpanAllColumns,
+                ImVec2(0.f, ImGui::GetTextLineHeight()))) {
+            world.sel_cell_valid = true;
+            world.sel_cell_x = c.x;
+            world.sel_cell_y = c.y;
+        }
+        ImGui::SameLine(0.f, 0.f);
+        { const char* tn = GetCellTypeName(c.type); char fb[16];
+          if (!tn) { std::snprintf(fb, sizeof(fb), "%u", static_cast<unsigned>(c.type)); tn = fb; }
+          ImGui::TextUnformatted(tn); }
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted(c.label);
+
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text("(%d,%d)", c.x, c.y);
 
         ImGui::PopID();
     }
@@ -70,6 +128,8 @@ void DrawInspector(World& world) {
     static bool group_by_type    = false;
     static char cell_search[64]  = {};
     static bool cell_group       = false;
+    static int  cell_type_filter = -1;
+    static int  cell_sort_mode   = 0;   // 0=默认 1=Type 2=名称 3=坐标
 
     // ---- Collect unique entity types present this frame ----
     int  types[32];
@@ -87,9 +147,11 @@ void DrawInspector(World& world) {
     static const char* ALL_LABEL = u8"全部";
     const char* combo_items[33];
     combo_items[0] = ALL_LABEL;
-    char type_bufs[32][8];
+    char type_bufs[32][32];
     for (int i = 0; i < ntypes; ++i) {
-        std::snprintf(type_bufs[i], sizeof(type_bufs[i]), "%d", types[i]);
+        const char* tn = GetEntityTypeName(static_cast<uint8_t>(types[i]));
+        if (tn) std::snprintf(type_bufs[i], sizeof(type_bufs[i]), "%s", tn);
+        else    std::snprintf(type_bufs[i], sizeof(type_bufs[i]), "%d", types[i]);
         combo_items[i + 1] = type_bufs[i];
     }
     int combo_idx = 0;
@@ -107,7 +169,9 @@ void DrawInspector(World& world) {
             if (endp != search + 1)
                 return static_cast<long long>(e.id) == want;
         }
-        return std::strstr(e.label, search) != nullptr;
+        if (std::strstr(e.label, search)) return true;
+        const char* tn = GetEntityTypeName(e.type);
+        return tn && std::strstr(tn, search) != nullptr;
     };
 
     // ---- Collect filtered indices ----
@@ -194,9 +258,10 @@ void DrawInspector(World& world) {
             for (int i : show_idx)
                 if (static_cast<int>(world.entities[i].type) == gt)
                     grp.push_back(i);
-            char hdr[32];
-            std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##grp%d",
-                gt, static_cast<int>(grp.size()), gt);
+            char hdr[64];
+            const char* gtn = GetEntityTypeName(static_cast<uint8_t>(gt));
+            if (gtn) std::snprintf(hdr, sizeof(hdr), "%s  (%d)##grp%d", gtn, static_cast<int>(grp.size()), gt);
+            else     std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##grp%d", gt, static_cast<int>(grp.size()), gt);
             if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
                 char tid[16];
                 std::snprintf(tid, sizeof(tid), "##tg%d", gt);
@@ -214,9 +279,10 @@ void DrawInspector(World& world) {
         bool found = false;
         for (auto& e : world.entities) {
             if (static_cast<int>(e.id) != world.selected_id) continue;
-            char sec[64];
-            std::snprintf(sec, sizeof(sec),
-                u8"基本信息 — %s  [type %d]##basic", e.label, e.type);
+            char sec[80];
+            const char* etn = GetEntityTypeName(e.type);
+            if (etn) std::snprintf(sec, sizeof(sec), u8"基本信息 — %s  [%s]##basic", e.label, etn);
+            else     std::snprintf(sec, sizeof(sec), u8"基本信息 — %s  [type %d]##basic", e.label, e.type);
             if (ImGui::CollapsingHeader(sec, ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::PushID(static_cast<int>(e.id));
                 ImGui::Text("ID: %llu", static_cast<unsigned long long>(e.id));
@@ -242,7 +308,9 @@ void DrawInspector(World& world) {
                     if (e.x != sel_x || e.y != sel_y) continue;
                     ImGui::PushID(static_cast<int>(e.id));
                     char buf[64];
-                    std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
+                    const char* ovtn = GetEntityTypeName(e.type);
+                    if (ovtn) std::snprintf(buf, sizeof(buf), "[%s] %s", ovtn, e.label);
+                    else      std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
                     if (ImGui::Selectable(buf))
                         world.selected_id = static_cast<int>(e.id);
                     ImGui::PopID();
@@ -261,10 +329,20 @@ void DrawInspector(World& world) {
             int n = 0;
             for (auto& c : world.cells) {
                 if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
-                if (n > 0) ImGui::Spacing();
                 ImGui::PushID(n);
-                ImGui::Text(u8"类型: %d  名称: %s", c.type, c.label);
-                InvokeCellDrawer(c);
+                const char* ctn = GetCellTypeName(c.type); char cnfb[16];
+                if (!ctn) { std::snprintf(cnfb, sizeof(cnfb), "%d", c.type); ctn = cnfb; }
+                char chdr[64];
+                std::snprintf(chdr, sizeof(chdr), "[%s] %s##csc%d", ctn, c.label, n);
+                ImVec4 ch4 = ImGui::ColorConvertU32ToFloat4(c.color);
+                ch4.w = 0.55f; ImGui::PushStyleColor(ImGuiCol_Header,        ImGui::ColorConvertFloat4ToU32(ch4));
+                ch4.w = 0.70f; ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::ColorConvertFloat4ToU32(ch4));
+                ch4.w = 0.85f; ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImGui::ColorConvertFloat4ToU32(ch4));
+                if (ImGui::CollapsingHeader(chdr, ImGuiTreeNodeFlags_DefaultOpen)) {
+                    ImGui::Text(u8"坐标: (%d, %d)", c.x, c.y);
+                    InvokeCellDrawer(c);
+                }
+                ImGui::PopStyleColor(3);
                 ImGui::PopID();
                 ++n;
             }
@@ -281,7 +359,9 @@ void DrawInspector(World& world) {
                 bool is_sel = static_cast<int>(e.id) == world.selected_id;
                 ImGui::PushID(static_cast<int>(e.id));
                 char buf[64];
-                std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
+                const char* etn2 = GetEntityTypeName(e.type);
+                if (etn2) std::snprintf(buf, sizeof(buf), "[%s] %s", etn2, e.label);
+                else      std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
                 if (ImGui::Selectable(buf, is_sel))
                     world.selected_id = is_sel ? -1 : static_cast<int>(e.id);
                 ImGui::PopID();
@@ -289,74 +369,121 @@ void DrawInspector(World& world) {
         }
     }
 
-    // ---- Cell list ----
+    // ---- Cell list: collect unique types for combo, filter, sort ----
+    int  ctypes_all[32]; int nctypes_all = 0;
+    for (const auto& c : world.cells) {
+        bool dup = false;
+        for (int k = 0; k < nctypes_all; ++k)
+            if (ctypes_all[k] == static_cast<int>(c.type)) { dup = true; break; }
+        if (!dup && nctypes_all < 32) ctypes_all[nctypes_all++] = static_cast<int>(c.type);
+    }
+    for (int i = 0; i < nctypes_all; ++i)
+        for (int j = i + 1; j < nctypes_all; ++j)
+            if (ctypes_all[j] < ctypes_all[i]) { int t = ctypes_all[i]; ctypes_all[i] = ctypes_all[j]; ctypes_all[j] = t; }
+
+    const char* cell_combo_items[33];
+    cell_combo_items[0] = ALL_LABEL;
+    char cell_type_bufs[32][32];
+    for (int i = 0; i < nctypes_all; ++i) {
+        const char* ctn = GetCellTypeName(static_cast<uint8_t>(ctypes_all[i]));
+        if (ctn) std::snprintf(cell_type_bufs[i], sizeof(cell_type_bufs[i]), "%s", ctn);
+        else     std::snprintf(cell_type_bufs[i], sizeof(cell_type_bufs[i]), "%d", ctypes_all[i]);
+        cell_combo_items[i + 1] = cell_type_bufs[i];
+    }
+    int cell_combo_idx = 0;
+    if (cell_type_filter != -1)
+        for (int i = 0; i < nctypes_all; ++i)
+            if (ctypes_all[i] == cell_type_filter) { cell_combo_idx = i + 1; break; }
+
+    auto pass_cell = [&](const Cell& c) {
+        if (cell_type_filter != -1 && static_cast<int>(c.type) != cell_type_filter) return false;
+        if (cell_search[0] == '\0') return true;
+        if (std::strstr(c.label, cell_search)) return true;
+        const char* ctn = GetCellTypeName(c.type);
+        return ctn && std::strstr(ctn, cell_search) != nullptr;
+    };
+
+    std::vector<int> cell_show_idx;
+    cell_show_idx.reserve(world.cells.size());
+    for (int i = 0; i < static_cast<int>(world.cells.size()); ++i)
+        if (pass_cell(world.cells[i])) cell_show_idx.push_back(i);
+
+    std::sort(cell_show_idx.begin(), cell_show_idx.end(), [&](int ai, int bi) -> bool {
+        const auto& a = world.cells[ai];
+        const auto& b = world.cells[bi];
+        switch (cell_sort_mode) {
+            case 1: return a.type != b.type ? a.type < b.type : (a.y != b.y ? a.y < b.y : a.x < b.x);
+            case 2: return std::strcmp(a.label, b.label) < 0;
+            case 3: return a.y != b.y ? a.y < b.y : a.x < b.x;
+            default: return ai < bi;
+        }
+    });
+
+    // ---- Cell list header + toolbar ----
     ImGui::Separator();
     if (ImGui::CollapsingHeader(u8"地图格子##cell_list", 0)) {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
-        ImGui::SetNextItemWidth(140.f);
-        ImGui::InputTextWithHint("##csearch", u8"搜索名称", cell_search, sizeof(cell_search));
+        ImGui::SetNextItemWidth(130.f);
+        ImGui::InputTextWithHint("##csearch", u8"搜索名称/类型", cell_search, sizeof(cell_search));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80.f);
+        if (ImGui::Combo("##ctype", &cell_combo_idx, cell_combo_items, nctypes_all + 1))
+            cell_type_filter = (cell_combo_idx == 0) ? -1 : ctypes_all[cell_combo_idx - 1];
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100.f);
+        const char* csort_items[] = { u8"默认", "Type", u8"名称", u8"坐标" };
+        ImGui::Combo("##csort", &cell_sort_mode, csort_items, IM_ARRAYSIZE(csort_items));
         ImGui::SameLine();
         ImGui::Checkbox(u8"分组##cgrp", &cell_group);
+
+        {
+            char ccnt[32];
+            std::snprintf(ccnt, sizeof(ccnt), "%d / %d",
+                static_cast<int>(cell_show_idx.size()),
+                static_cast<int>(world.cells.size()));
+            float cnt_w = ImGui::CalcTextSize(ccnt).x + 4.f;
+            float avail  = ImGui::GetContentRegionAvail().x;
+            if (avail > cnt_w) {
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - cnt_w);
+                ImGui::TextDisabled("%s", ccnt);
+            }
+        }
+
         ImGui::PopStyleVar();
 
-        auto pass_cell = [&](const Cell& c) {
-            if (cell_search[0] == '\0') return true;
-            return std::strstr(c.label, cell_search) != nullptr;
-        };
-
-        if (cell_group) {
-            int ctypes[32]; int nctypes = 0;
-            for (const auto& c : world.cells) {
-                if (!pass_cell(c)) continue;
+        if (cell_show_idx.empty()) {
+            ImGui::TextDisabled(u8"(无匹配项)");
+        } else if (cell_group) {
+            int cgtypes[32]; int ncgtypes = 0;
+            for (int i : cell_show_idx) {
+                int t = static_cast<int>(world.cells[i].type);
                 bool dup = false;
-                for (int k = 0; k < nctypes; ++k) if (ctypes[k] == c.type) { dup = true; break; }
-                if (!dup && nctypes < 32) ctypes[nctypes++] = c.type;
+                for (int k = 0; k < ncgtypes; ++k) if (cgtypes[k] == t) { dup = true; break; }
+                if (!dup && ncgtypes < 32) cgtypes[ncgtypes++] = t;
             }
-            for (int i = 0; i < nctypes; ++i)
-                for (int j = i + 1; j < nctypes; ++j)
-                    if (ctypes[j] < ctypes[i]) { int t = ctypes[i]; ctypes[i] = ctypes[j]; ctypes[j] = t; }
+            for (int i = 0; i < ncgtypes; ++i)
+                for (int j = i + 1; j < ncgtypes; ++j)
+                    if (cgtypes[j] < cgtypes[i]) { int t = cgtypes[i]; cgtypes[i] = cgtypes[j]; cgtypes[j] = t; }
 
-            for (int g = 0; g < nctypes; ++g) {
-                int gt = ctypes[g];
-                int cnt_c = 0;
-                for (const auto& c : world.cells) if (pass_cell(c) && c.type == gt) ++cnt_c;
-                char hdr[32];
-                std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##cgrp%d", gt, cnt_c, gt);
+            for (int g = 0; g < ncgtypes; ++g) {
+                int gt = cgtypes[g];
+                std::vector<int> cgrp;
+                for (int i : cell_show_idx)
+                    if (static_cast<int>(world.cells[i].type) == gt)
+                        cgrp.push_back(i);
+                char hdr[64];
+                const char* cgtn = GetCellTypeName(static_cast<uint8_t>(gt));
+                if (cgtn) std::snprintf(hdr, sizeof(hdr), "%s  (%d)##cgrp%d", cgtn, static_cast<int>(cgrp.size()), gt);
+                else      std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##cgrp%d", gt, static_cast<int>(cgrp.size()), gt);
                 if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                    int ci = 0;
-                    for (const auto& c : world.cells) {
-                        if (c.type != gt || !pass_cell(c)) continue;
-                        char buf[64];
-                        std::snprintf(buf, sizeof(buf), "(%d,%d) %s", c.x, c.y, c.label);
-                        bool sel = world.sel_cell_valid &&
-                                   world.sel_cell_x == c.x && world.sel_cell_y == c.y;
-                        ImGui::PushID(ci + gt * 1000);
-                        if (ImGui::Selectable(buf, sel)) {
-                            world.sel_cell_valid = true;
-                            world.sel_cell_x = c.x; world.sel_cell_y = c.y;
-                        }
-                        ImGui::PopID();
-                        ++ci;
-                    }
+                    char ctid[16];
+                    std::snprintf(ctid, sizeof(ctid), "##ctg%d", gt);
+                    CellTableImpl(world, cgrp, ctid, false);
                 }
             }
         } else {
-            int ci = 0; bool any = false;
-            for (const auto& c : world.cells) {
-                if (!pass_cell(c)) continue;
-                any = true;
-                char buf[64];
-                std::snprintf(buf, sizeof(buf), "(%d,%d) %s", c.x, c.y, c.label);
-                bool sel = world.sel_cell_valid &&
-                           world.sel_cell_x == c.x && world.sel_cell_y == c.y;
-                ImGui::PushID(ci++);
-                if (ImGui::Selectable(buf, sel)) {
-                    world.sel_cell_valid = true;
-                    world.sel_cell_x = c.x; world.sel_cell_y = c.y;
-                }
-                ImGui::PopID();
-            }
-            if (!any) ImGui::TextDisabled(u8"(无匹配项)");
+            CellTableImpl(world, cell_show_idx, "##cell_tbl", true);
         }
     }
 

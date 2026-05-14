@@ -19,6 +19,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::World   world   = dui::MakeMockWorld();
     dui::Metrics metrics;
 
+    // --- Type name registrations ---
+    dui::RegisterEntityTypeName(0, u8"主角");
+    dui::RegisterEntityTypeName(1, u8"战士");
+    dui::RegisterEntityTypeName(2, u8"法师");
+    dui::RegisterCellTypeName(1, u8"墙壁");
+    dui::RegisterCellTypeName(2, u8"水域");
+    dui::RegisterCellTypeName(3, u8"陷阱");
+
     // --- Extension point demo: custom fields for type-1 entities ---
     dui::RegisterEntityDrawer(1, [](dui::Entity& e) {
         ImGui::Text(u8"速度: vx=%.2f  vy=%.2f", e.vx, e.vy);
