@@ -7,6 +7,9 @@
 ## 目录
 
 - [快速开始](#快速开始)
+- [接入到游戏项目](#接入到游戏项目)
+  - [Visual Studio 项目引入（推荐）](#visual-studio-项目引入推荐)
+  - [CMake 项目引入](#cmake-项目引入)
 - [接入方式](#接入方式)
   - [独立窗口模式](#独立窗口模式-init)
   - [注入式模式](#注入式模式-attach)
@@ -22,7 +25,7 @@
 - [扩展点](#扩展点)
   - [Entity / Cell 自定义字段](#entitycell-自定义字段)
   - [命令注册](#命令注册)
-- [构建](#构建)
+- [构建 Demo](#构建-demo)
 - [目录结构](#目录结构)
 
 ---
@@ -32,28 +35,116 @@
 ```cpp
 #include "dui_app.h"
 #include "dui_world.h"
-#include "dui_canvas.h"
-#include "dui_inspector.h"
-#include "dui_log.h"
-#include "dui_commands.h"
+#include "dui_draw_all.h"   // DrawAll = 所有面板一次调用
 
-int WINAPI WinMain(...) {
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::App app;
-    app.Init(1280, 720, L"My Game Debug UI");
+    app.Init(1280, 720, L"Game Debug");
 
-    dui::World world = /* 填入你的游戏数据 */;
+    dui::World   world;    // 每帧从游戏状态填充
+    dui::Metrics metrics;
 
     while (app.Tick([&]() {
-        dui::DrawCanvas(world);
-        dui::DrawInspector(world);
-        dui::DrawLog();
-        dui::DrawWatch();
-        dui::DrawCommands();
+        dui::DrawAll(world, metrics);
     })) {
-        // 游戏逻辑 tick
+        // 游戏逻辑 / 填充 world ...
         dui::Watch("entity_count", (int)world.entities.size());
     }
 }
+```
+
+`App::Tick` 会自动处理消息循环、帧开始/结束，以及首次启动时的默认停靠布局（左 Inspector / 中 Canvas / 右 Detail / 底部日志组）。布局会通过 `debug_ui.ini` 持久化，用户拖拽调整后下次打开保持不变。
+
+---
+
+## 接入到游戏项目
+
+### Visual Studio 项目引入（推荐）
+
+适合现有 Visual Studio 解决方案，不需要迁移到 CMake。
+
+**第一步：编译出 lib（只需做一次）**
+
+```bat
+cd path\to\debug-ui-demo
+cmake -B build
+cmake --build build --config Release
+```
+
+**第二步：导入属性表**
+
+打开你的游戏 `.sln` →  **视图 → 属性管理器** → 展开项目 → 右键 `Release | x64` → **添加现有属性表** → 选择：
+
+```
+path\to\debug-ui-demo\dui.props
+```
+
+Debug 配置同理再导入一次（`.props` 自动按 `$(Configuration)` 找对应 lib）。
+
+**第三步：代码里直接用**
+
+```cpp
+#include "dui_app.h"
+#include "dui_world.h"
+#include "dui_draw_all.h"
+
+// 全局或管理器成员
+dui::App     g_dui;
+dui::World   g_dui_world;
+dui::Metrics g_dui_metrics;
+
+// 游戏启动时
+g_dui.Init(1280, 720, L"Game Debug");
+
+// 每帧游戏 Tick 里
+void Game::Tick(float dt) {
+    // 把游戏数据填进 World
+    g_dui_world.entities.clear();
+    for (auto& u : m_units) {
+        dui::Entity e{};
+        e.id    = u.id;
+        e.x     = u.grid_x;  e.y = u.grid_y;
+        e.type  = (uint8_t)u.type;
+        e.color = u.color;
+        e.userdata = &u;     // 在 RegisterEntityDrawer 里 static_cast 回来
+        snprintf(e.label, sizeof(e.label), "#%llu", u.id);
+        g_dui_world.entities.push_back(e);
+    }
+    g_dui_world.player_id = m_player_id;
+
+    // 驱动调试窗口（独立 OS 窗口，不干扰游戏窗口）
+    g_dui.Tick([&]() {
+        dui::DrawAll(g_dui_world, g_dui_metrics);
+    });
+}
+```
+
+> `Tick` 内部只处理 dui 自己窗口的消息，不会干扰游戏的消息循环。调试窗口关掉后 `Tick` 返回 `false`，游戏继续运行不受影响。
+
+**仅在 Debug 版本里开启**
+
+```cpp
+#ifdef _DEBUG
+    g_dui.Init(1280, 720, L"Game Debug");
+    g_dui_enabled = true;
+#endif
+
+// 每帧
+#ifdef _DEBUG
+if (g_dui_enabled)
+    g_dui.Tick([&]() { dui::DrawAll(g_dui_world, g_dui_metrics); });
+#endif
+```
+
+---
+
+### CMake 项目引入
+
+```cmake
+add_subdirectory(path/to/debug-ui-demo)
+
+target_link_libraries(my_game PRIVATE dui)
+target_include_directories(my_game PRIVATE path/to/debug-ui-demo/src)
 ```
 
 ---
@@ -62,92 +153,77 @@ int WINAPI WinMain(...) {
 
 ### 独立窗口模式（Init）
 
-dui 自己创建窗口和 D3D11 设备，适合独立调试工具或快速原型，也适合 MFC / 其他引擎游戏以独立调试窗口形式接入。
+dui 自己创建窗口和 D3D11 设备，适合独立调试工具、或嵌入任意引擎的游戏以独立调试窗口形式接入（不依赖游戏的渲染管线）。
 
 ```cpp
 dui::App app;
-if (!app.Init(1280, 720, L"Debug UI")) return 1;
-
-// 可选：在 Init 之前调用，加载自定义字体
-app.SetFontPath("path/to/font.ttf", 18.f);
+app.SetFontPath("path/to/font.ttf", 18.f);  // 可选，加载自定义字体
+app.Init(1280, 720, L"Debug UI");
 
 while (app.Tick([&]() {
-    // 在这里调用各 Draw* 函数
+    dui::DrawAll(world, metrics);
 })) {
     // 游戏逻辑
 }
 ```
 
-`Tick` 内部按顺序执行：`PumpMessages → BeginFrame → draw_fn → EndFrame + Present`。
+**自定义停靠布局**
 
-`PumpMessages` 只处理 dui 自己窗口的消息，不会干扰宿主程序（MFC 等）的消息循环。
+默认布局在首次启动（无 ini 时）自动应用。如需自定义，在 `Init` 之前调用：
 
-#### 在 MFC 游戏里调用
+```cpp
+#include <imgui_internal.h>
+
+app.SetDockLayoutFn([](ImGuiID dsid) {
+    // 用 ImGui::DockBuilder* API 自定义布局
+    ImGui::DockBuilderRemoveNode(dsid);
+    ImGui::DockBuilderAddNode(dsid, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dsid, ImGui::GetMainViewport()->Size);
+    ImGuiID mid = dsid;
+    ImGuiID left = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Left, 0.3f, nullptr, &mid);
+    ImGui::DockBuilderDockWindow(u8"检视器", left);
+    ImGui::DockBuilderDockWindow(u8"场景视图", mid);
+    ImGui::DockBuilderFinish(dsid);
+});
+
+// 传空 lambda 可完全禁用自动布局
+app.SetDockLayoutFn([](ImGuiID) {});
+```
+
+#### 在 MFC / 其他引擎里调用
 
 在 `OnIdle` 或定时器回调里同步数据并驱动 dui：
 
 ```cpp
-// CMyApp 或 CMyView 里，持有这两个成员：
-dui::App   m_dui_app;
-dui::World m_dui_world;
-
-// 初始化（InitInstance 或 OnCreate）：
-m_dui_app.Init(1280, 720, L"Game Debug");
-dui::RegisterCommand(u8"World/重置", [&]() { /* ... */ });
-
 // OnIdle / WM_TIMER / 游戏帧回调：
 void CMyApp::OnGameTick(float dt) {
-    // 1. 把游戏数据同步进 dui::World
-    m_dui_world.entities.clear();
-    for (auto& u : m_game.units) {
-        dui::Entity e{};
-        e.id       = u.id;
-        e.x        = u.grid_x;
-        e.y        = u.grid_y;
-        e.color    = u.color;
-        e.type     = (uint8_t)u.type;
-        e.userdata = &u;          // 可在 RegisterEntityDrawer 里强转回来
-        snprintf(e.label, sizeof(e.label), "%s", u.name.c_str());
-        m_dui_world.entities.push_back(e);
-    }
-    m_dui_world.player_id = m_game.player_id;
+    // 同步游戏数据到 World ...
 
-    // 2. 驱动 dui 渲染（Tick 返回 false 说明 dui 窗口被关闭）
     m_dui_app.Tick([&]() {
-        dui::DrawCanvas(m_dui_world);
-        dui::DrawInspector(m_dui_world);
-        dui::DrawLog();
-        dui::DrawWatch();
-        dui::DrawCommands();
+        dui::DrawAll(m_dui_world, m_dui_metrics);
     });
-
-    // 3. 照常推送 Watch / Log 数据
-    dui::Watch(u8"entities", (int)m_game.units.size());
 }
 ```
 
 ### 注入式模式（Attach）
 
-dui 附着到游戏已有的 D3D11 上下文，适合集成进正在运行的游戏。
+dui 附着到游戏已有的 D3D11 上下文，渲染叠加在游戏画面上，适合需要与游戏界面融合的场景。
 
 ```cpp
 // 游戏已有：HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* ctx, IDXGISwapChain* sc
-
 dui::App dui_app;
 dui_app.Attach(hwnd, dev, ctx, sc);
 
-// 在游戏主循环的渲染阶段每帧调用：
+// 在游戏渲染阶段每帧调用（Present 之前）：
 dui_app.BeginFrame();
-dui::DrawCanvas(world);
-dui::DrawLog();
-// ... 其他面板 ...
+dui::DrawAll(world, metrics);
 dui_app.EndFrame();   // 渲染 ImGui；不调用 Present，由游戏自己 Present
 
-// 窗口大小变化后重建 RTV：
+// 窗口大小变化后：
 dui_app.RebuildRenderTarget();
 ```
 
-**注意**：在注入模式下，游戏的 WndProc 需要转发 ImGui 消息：
+**注意**：注入模式下，游戏的 WndProc 需要转发 ImGui 消息：
 
 ```cpp
 #include <imgui_impl_win32.h>
@@ -184,13 +260,13 @@ struct World {
 ```cpp
 struct Entity {
     uint64_t id;
-    int      x, y;              // 网格整数坐标（驱动渲染）
-    float    fx, fy;            // 浮点坐标累加器（用 roundf 驱动 x/y）
-    float    vx, vy;            // 速度（网格单位/秒）
-    float    radius;            // 视觉填充比例 0..1
-    uint32_t color;             // ABGR 格式，可用 IM_COL32 生成
-    uint8_t  type;              // 调用方定义的类型标签
-    char     label[16];         // 显示名称
+    int      x, y;               // 网格整数坐标（驱动渲染）
+    float    fx, fy;             // 浮点坐标（可用 roundf 驱动 x/y）
+    float    vx, vy;             // 速度（网格单位/秒）
+    float    radius;             // 视觉填充比例 0..1
+    uint32_t color;              // ABGR 格式，可用 IM_COL32 生成
+    uint8_t  type;               // 调用方定义的类型标签
+    char     label[16];          // 显示名称
     void*    userdata = nullptr; // 指向游戏自有结构，库不解读也不释放
 };
 ```
@@ -207,7 +283,7 @@ struct Cell {
 };
 ```
 
-`userdata` 供 [自定义字段扩展点](#entitycell-自定义字段) 使用，把游戏侧的 `MyUnit*` / `MyTile*` 塞进来即可。
+`userdata` 供[自定义字段扩展点](#entitycell-自定义字段)使用，把游戏侧的 `MyUnit*` / `MyTile*` 塞进来即可。
 
 ---
 
@@ -215,7 +291,7 @@ struct Cell {
 
 ### 场景视图 DrawCanvas
 
-等距 45° 投影的 2D 地图视图，以当前相机位置为中心渲染。
+等距 45° 投影的 2D 地图视图。
 
 ```cpp
 dui::DrawCanvas(world);
@@ -225,21 +301,15 @@ dui::CanvasView view;
 dui::DrawCanvas(world, &view);
 ```
 
-**Toolbar 功能：**
-
-| 控件 | 说明 |
-|------|------|
-| 格线 / 格子 / 实体 / 标签 / 坐标轴 | 图层开关 |
-| 跟随 / 自由 | 相机模式切换 |
-| 重置 | 相机跳回主角位置 |
-
 **交互：**
-- 左键点击实体 → 选中并切换到跟随模式
-- 左键点击格子 → 选中格子（Inspector 下方显示详情）
-- 左键拖拽空白区域 → 自由平移相机
-- 右键拖拽 → 自由平移相机
 
-**橙色边框**：始终锚定在被跟随实体的 37×37 格视野范围上，与相机是否自由平移无关。
+| 操作 | 效果 |
+|------|------|
+| 左键点击实体 | 选中 |
+| 左键点击格子 | 选中格子（Inspector 显示详情） |
+| 滚轮 | 缩放（以鼠标位置为锚点） |
+| 中键拖拽 | 平移相机（自动退出跟随模式） |
+| Toolbar → Fit | 自动缩放居中显示当前地图所有内容 |
 
 ### 检视器 DrawInspector
 
@@ -247,87 +317,60 @@ dui::DrawCanvas(world, &view);
 dui::DrawInspector(world);
 ```
 
-- 顶部搜索框（按 `label` 子串过滤）+ 类型下拉（按 `type` 过滤）
-- 实体列表：点击选中/取消；选中后下方展示 x/y/radius 可编辑字段及[自定义扩展字段](#entitycell-自定义字段)
-- 地图格子折叠列表：点击选中，在场景视图上高亮金框
+搜索框 + 类型过滤 + 实体列表 + 可编辑字段 + 格子列表。
 
 ### 实体详情 DrawEntityDetail
 
 ```cpp
 #include "dui_detail.h"
 
-// 启动时注册（同 type 重复注册会覆盖）
 dui::RegisterEntityDetailText(/*type=*/1, [](const dui::Entity& e) -> std::string {
     char buf[512];
     std::snprintf(buf, sizeof(buf),
         "=== 基础 ===\n"
         "ID    : %llu\n"
-        "Type  : %u\n"
-        "Label : %s\n"
-        "\n"
-        "=== 物理 ===\n"
-        "Pos   : (%.2f, %.2f)\n"
-        "Vel   : (%.2f, %.2f)\n",
-        (unsigned long long)e.id, (unsigned)e.type, e.label,
-        e.fx, e.fy, e.vx, e.vy);
+        "Pos   : (%.2f, %.2f)\n",
+        (unsigned long long)e.id, e.fx, e.fy);
     return buf;
 });
 
-// 在 Tick 回调里绘制面板：
 dui::DrawEntityDetail(world);
 ```
-
-当选中实体的 type 注册了 `EntityDetailTextFn` 时，面板头部显示内置字段（id / type / 坐标 / 半径），其下可滚动区域展示回调返回的多行文本。
-
-**与 RegisterEntityDrawer 的区别：**
-
-| | RegisterEntityDrawer | RegisterEntityDetailText |
-|---|---|---|
-| 位置 | Inspector 详情区（行内） | 独立面板 |
-| 适用 | 少量字段 + 可交互控件 | 大量字段、纯查看 |
-| 格式 | 逐行 ImGui 控件 | 自己排版好的多行字符串 |
 
 ### Metrics DrawMetrics
 
 ```cpp
 dui::Metrics metrics;
-// 每帧更新：
 metrics.tick_ms.push(tick_duration_ms);
 metrics.entity_count.push((float)world.entities.size());
 
 dui::DrawMetrics(metrics);
 ```
 
-显示 tick 耗时和实体数量的滚动折线图（ImPlot 实现，最近 300 帧）。
+显示 tick 耗时和实体数量的滚动折线图（最近 300 帧）。
 
 ### 日志 DrawLog
 
 ```cpp
-// 任意位置推送消息：
 dui::Log(u8"tick #%d", n);
 dui::LogWarn(u8"警告: %s", msg);
 dui::LogError(u8"错误: code=%d", code);
 
-// 在 Tick 回调里绘制面板：
 dui::DrawLog();
 ```
 
-- 最多保留 1000 条（环形缓冲）
-- 按 Info / Warn / Error 着色，支持 checkbox 过滤和文本子串搜索
-- 自动滚到底部（用户上滚查阅时不会被打断）
+最多保留 1000 条，支持 Info/Warn/Error 过滤和文本搜索。
 
 ### 监视 DrawWatch
 
 ```cpp
-// 任意位置更新 key-value：
 dui::Watch(u8"实体数", (int)world.entities.size());
 dui::Watch(u8"player_x", world.entities[0].x);
-dui::Watch("speed", velocity);   // 支持 int / float / bool / const char*
 
 dui::DrawWatch();
 ```
 
-同名调用覆盖上一次的值，以双列表格实时显示。
+同名调用覆盖上一次的值，以双列表格实时显示。支持 `int / float / bool / const char*`。
 
 ### 命令面板 DrawCommands
 
@@ -343,13 +386,12 @@ dui::DrawCommands();
 
 ### Entity / Cell 自定义字段
 
-在检视器的实体/格子详情区追加任意 ImGui 控件，无需修改库代码。
+在 Inspector 的实体/格子详情区追加任意 ImGui 控件，无需修改库代码。
 
 ```cpp
 #include "dui_ext.h"
 #include <imgui.h>
 
-// 在程序启动时注册（覆盖同 type 的上一次注册）
 dui::RegisterEntityDrawer(/*type=*/1, [](dui::Entity& e) {
     auto* unit = static_cast<MyUnit*>(e.userdata);
     ImGui::Text("HP: %d / %d", unit->hp, unit->max_hp);
@@ -363,7 +405,21 @@ dui::RegisterCellDrawer(/*type=*/2, [](dui::Cell& c) {
 });
 ```
 
-**生命周期**：`userdata` 指针由游戏管理，库只在 drawer 回调里使用它，不持有所有权。确保实体/格子在 `world.entities` / `world.cells` vector 里时指针不悬空。
+**类型名注册**（Inspector / Canvas 里显示中文名而非数字）：
+
+```cpp
+dui::RegisterEntityTypeName(0, u8"玩家");
+dui::RegisterEntityTypeName(1, u8"战士");
+dui::RegisterCellTypeName(1,   u8"墙壁");
+```
+
+**Canvas 标记**（在指定实体上方显示彩色三角）：
+
+```cpp
+dui::SetPlayerEntityType(0);                              // type-0 全部显示黄色三角
+dui::SetEntityMarker(1002, IM_COL32(255, 80, 80, 230));  // entity #1002 显示红色三角
+dui::ClearEntityMarker(1002);                             // 取消
+```
 
 ### 命令注册
 
@@ -383,46 +439,29 @@ dui::RegisterCommand(u8"Player/传送到原点", [&world]() {
     }
 });
 
-// 无 "/" 的命令归入"通用"分组
-dui::RegisterCommand(u8"截图", []() { /* ... */ });
-
-// 取消注册
-dui::UnregisterCommand(u8"World/重置世界");
+dui::UnregisterCommand(u8"World/重置世界");  // 取消注册
 ```
-
-面板交互：点击「执行」按钮或双击命令行触发。
 
 ---
 
-## 构建
+## 构建 Demo
 
-**依赖**（均以 git submodule 形式放在 `third_party/`）
+**依赖**（放在 `third_party/`）
 
-- [Dear ImGui](https://github.com/ocornut/imgui) — docking 分支或 master
+- [Dear ImGui](https://github.com/ocornut/imgui) — docking 分支
 - [ImPlot](https://github.com/epezent/implot)
-- MSVC / Visual Studio（Windows 平台，使用 D3D11 后端）
-
-**构建步骤**
+- MSVC / Visual Studio，Windows 平台，D3D11 后端
 
 ```bat
 cmake -S . -B build
-cmake --build build --config Debug
+cmake --build build --config Release
 ```
 
 产物：
-- `build/Debug/dui.lib` — 核心库（可被其他 exe 链接）
-- `build/Debug/dui_demo.exe` — 演示程序
+- `build/Release/dui.lib` — 核心库
+- `build/Release/dui_demo.exe` — 演示程序
 
-运行演示程序需要 `assets/fonts/LXGWWenKai-Regular.ttf`（CMake 会自动拷贝到输出目录旁）。若字体文件缺失，自动回退到 ImGui 内置字体（不含中文字形）。
-
-**链接到自己的项目**
-
-```cmake
-add_subdirectory(path/to/dui)
-
-target_link_libraries(my_game PRIVATE dui)
-target_include_directories(my_game PRIVATE path/to/dui/src)
-```
+运行演示程序需要 `assets/fonts/LXGWWenKai-Regular.ttf`（CMake 构建后自动拷贝到 exe 旁）。字体缺失时自动回退到 ImGui 内置字体。
 
 ---
 
@@ -430,22 +469,25 @@ target_include_directories(my_game PRIVATE path/to/dui/src)
 
 ```
 src/
-  dui_app.h / .cpp        App 生命周期（Init / Attach / Tick）
-  dui_world.h             Entity / Cell / World 数据结构
-  dui_mock.h / .cpp       演示用 MakeMockWorld / TickMockWorld（不在库里）
-  dui_canvas.h / .cpp     场景视图面板
-  dui_inspector.h / .cpp  检视器面板
-  dui_metrics.h / .cpp    性能图表面板
-  dui_log.h / .cpp        日志面板 + Log* API
-  dui_ext.h / .cpp        Entity / Cell 自定义字段扩展点（Inspector 行内）
-  dui_detail.h / .cpp     实体详情面板 + RegisterEntityDetailText API
-  dui_commands.h / .cpp   命令面板 + RegisterCommand API
-  main.cpp                演示程序入口
+  dui_app.h / .cpp          App 生命周期（Init / Attach / Tick / SetDockLayoutFn）
+  dui_world.h               Entity / Cell / World 数据结构
+  dui_draw_all.h / .cpp     DrawAll — 一次调用绘制所有面板
+  dui_canvas.h / .cpp       场景视图面板
+  dui_inspector.h / .cpp    检视器面板
+  dui_metrics.h / .cpp      性能图表面板
+  dui_log.h / .cpp          日志面板 + Log* API
+  dui_ext.h / .cpp          扩展点（类型名、Canvas 标记、Entity Drawer）
+  dui_detail.h / .cpp       实体详情面板 + RegisterEntityDetailText API
+  dui_commands.h / .cpp     命令面板 + RegisterCommand API
+  dui_mock.h / .cpp         演示用 MakeMockWorld / TickMockWorld（不在库里）
+  dui_demo_setup.h / .cpp   演示用注册代码（不在库里）
+  main.cpp                  演示程序入口
 third_party/
-  imgui/                  Dear ImGui
-  implot/                 ImPlot
+  imgui/                    Dear ImGui（docking 分支）
+  implot/                   ImPlot
 tests/
-  test_ring_buffer.cpp    RingBuffer 单元测试
+  test_ring_buffer.cpp      RingBuffer 单元测试
 assets/
-  fonts/                  LXGWWenKai-Regular.ttf
+  fonts/                    LXGWWenKai-Regular.ttf
+dui.props                   Visual Studio 属性表，导入即可配好所有 include / lib 路径
 ```
