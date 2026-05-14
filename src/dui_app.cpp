@@ -142,7 +142,7 @@ void App::Shutdown() {
     }
 
     if (owns_window_) {
-        DestroyWindow(hwnd_);
+        if (hwnd_) DestroyWindow(hwnd_);  // may be null if WM_DESTROY already fired
         UnregisterClassW(L"DuiWindow", GetModuleHandleW(nullptr));
     }
     hwnd_          = nullptr;
@@ -151,15 +151,25 @@ void App::Shutdown() {
 
 bool App::PumpMessages() {
     MSG msg;
-    // Filter to hwnd_ only — avoids stealing messages from a host app's message loop
-    // (e.g. MFC) when dui runs as a secondary window on the same thread.
-    while (PeekMessageW(&msg, hwnd_, 0, 0, PM_REMOVE)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-        if (msg.message == WM_QUIT) return false;
+    if (owns_window_) {
+        // Standard standalone loop: WM_QUIT is on the thread queue (hwnd=NULL),
+        // so we must pump with nullptr to catch it. Check it before dispatch so
+        // we don't call BeginFrame/EndFrame after the window is gone.
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) return false;
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    } else {
+        // Embedded in a host app: filter to our hwnd only — avoids stealing
+        // messages from the host's message loop (e.g. MFC) on the same thread.
+        while (PeekMessageW(&msg, hwnd_, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        // WM_QUIT is posted to the thread queue (no HWND), check separately.
+        if (PeekMessageW(&msg, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE)) return false;
     }
-    // WM_QUIT is posted to the thread queue (no HWND), so check separately.
-    if (PeekMessageW(&msg, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE)) return false;
     return true;
 }
 
@@ -244,6 +254,7 @@ LRESULT CALLBACK App::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if ((wp & 0xFFF0) == SC_KEYMENU) return 0;
         break;
     case WM_DESTROY:
+        if (g_app_instance) g_app_instance->hwnd_ = nullptr;
         PostQuitMessage(0);
         return 0;
     }
