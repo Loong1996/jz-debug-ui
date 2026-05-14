@@ -1,5 +1,6 @@
 #include "dui_app.h"
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 #include <implot.h>
@@ -196,9 +197,44 @@ void App::EndFrame() {
     if (owns_device_) swapchain_->Present(1, 0);
 }
 
+void App::SetDockLayoutFn(std::function<void(ImGuiID)> fn) {
+    custom_layout_fn_ = std::move(fn);
+}
+
+void App::ApplyBuiltinLayout(ImGuiID dsid) {
+    ImGui::DockBuilderRemoveNode(dsid);
+    ImGui::DockBuilderAddNode(dsid, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dsid, ImGui::GetMainViewport()->Size);
+
+    ImGuiID mid = dsid;
+    ImGuiID bot = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Down,  0.28f, nullptr, &mid);
+    ImGuiID lft = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Left,  0.20f, nullptr, &mid);
+    ImGuiID rgt = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Right, 0.24f, nullptr, &mid);
+
+    ImGui::DockBuilderDockWindow(u8"检视器",   lft);
+    ImGui::DockBuilderDockWindow(u8"场景视图", mid);
+    ImGui::DockBuilderDockWindow(u8"实体详情", rgt);
+    ImGui::DockBuilderDockWindow(u8"日志",     bot);
+    ImGui::DockBuilderDockWindow(u8"监视",     bot);
+    ImGui::DockBuilderDockWindow(u8"性能指标", bot);
+    ImGui::DockBuilderDockWindow(u8"命令",     bot);
+    ImGui::DockBuilderFinish(dsid);
+}
+
 bool App::Tick(const std::function<void()>& draw_fn) {
     if (!PumpMessages()) return false;
     BeginFrame();
+
+    ImGuiID dsid = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+    if (!layout_inited_) {
+        layout_inited_ = true;
+        ImGuiDockNode* node = ImGui::DockBuilderGetNode(dsid);
+        if (node == nullptr || node->IsLeafNode()) {
+            if (custom_layout_fn_) custom_layout_fn_(dsid);
+            else                   ApplyBuiltinLayout(dsid);
+        }
+    }
+
     draw_fn();
     EndFrame();
     return true;

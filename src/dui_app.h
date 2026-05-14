@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <functional>
+#include <imgui.h>
 
 namespace dui {
 
@@ -31,6 +32,11 @@ public:
     // Configure font before Init/Attach. Pass nullptr to use the ImGui built-in font.
     void SetFontPath(const char* ttf_path, float pixel_size = 18.f);
 
+    // Override the default first-run dock layout. Pass a lambda that receives the
+    // dockspace ID and calls DockBuilder* to arrange windows. Pass an empty function
+    // to disable automatic layout entirely. Must be called before the first Tick().
+    void SetDockLayoutFn(std::function<void(ImGuiID)> fn);
+
     // Rebuild the render-target view from the current swap chain back buffer.
     // Call this after a swap chain resize when using Attach mode.
     void RebuildRenderTarget();
@@ -51,12 +57,15 @@ private:
     IDXGISwapChain*         swapchain_ = nullptr;
     ID3D11RenderTargetView* rtv_       = nullptr;
 
-    bool owns_device_ = false;
-    bool owns_window_ = false;
+    bool owns_device_   = false;
+    bool owns_window_   = false;
+    bool layout_inited_ = false;
+    std::function<void(ImGuiID)> custom_layout_fn_;
     char  font_path_[512] = {};
     float font_size_      = 18.f;
 
     void InitImGui();
+    void ApplyBuiltinLayout(ImGuiID dsid);
     bool CreateDeviceD3D(HWND hwnd);
     void CreateRenderTarget();
     void DestroyRenderTarget();

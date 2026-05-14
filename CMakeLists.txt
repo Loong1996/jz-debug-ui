@@ -23,6 +23,7 @@ add_library(dui STATIC
     src/dui_ext.cpp
     src/dui_commands.cpp
     src/dui_detail.cpp
+    src/dui_draw_all.cpp
 )
 target_include_directories(dui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -37,6 +38,7 @@ target_link_libraries(dui PUBLIC imgui implot d3d11 dxgi d3dcompiler)
 add_executable(dui_demo WIN32
     src/main.cpp
     src/dui_mock.cpp
+    src/dui_demo_setup.cpp
 )
 target_compile_options(dui_demo PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 target_link_libraries(dui_demo PRIVATE dui)
