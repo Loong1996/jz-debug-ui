@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <chrono>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include "dui_app.h"
 #include "dui_world.h"
 #include "dui_mock.h"
@@ -92,6 +93,30 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     int   tick_count = 0;
 
     while (app.Tick([&]() {
+        ImGuiID dsid = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+        static bool layout_inited = false;
+        if (!layout_inited) {
+            layout_inited = true;
+            if (ImGui::DockBuilderGetNode(dsid) == nullptr) {
+                ImGui::DockBuilderRemoveNode(dsid);
+                ImGui::DockBuilderAddNode(dsid, ImGuiDockNodeFlags_DockSpace);
+                ImGui::DockBuilderSetNodeSize(dsid, ImGui::GetMainViewport()->Size);
+
+                ImGuiID mid = dsid;
+                ImGuiID bot = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Down,  0.28f, nullptr, &mid);
+                ImGuiID lft = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Left,  0.20f, nullptr, &mid);
+                ImGuiID rgt = ImGui::DockBuilderSplitNode(mid, ImGuiDir_Right, 0.24f, nullptr, &mid);
+
+                ImGui::DockBuilderDockWindow(u8"检视器",   lft);
+                ImGui::DockBuilderDockWindow(u8"场景视图", mid);
+                ImGui::DockBuilderDockWindow(u8"实体详情", rgt);
+                ImGui::DockBuilderDockWindow(u8"日志",     bot);
+                ImGui::DockBuilderDockWindow(u8"监视",     bot);
+                ImGui::DockBuilderDockWindow(u8"性能指标", bot);
+                ImGui::DockBuilderDockWindow(u8"命令",     bot);
+                ImGui::DockBuilderFinish(dsid);
+            }
+        }
         dui::DrawInspector(world);
         dui::DrawCanvas(world);
         dui::DrawMetrics(metrics);

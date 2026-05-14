@@ -60,7 +60,11 @@ bool App::Init(int width, int height, const wchar_t* title) {
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGui::StyleColorsDark();
-    ImGui::GetIO().IniFilename = "debug_ui.ini";
+    {
+        ImGuiIO& io    = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.IniFilename  = "debug_ui.ini";
+    }
 
     InitImGui();
 
@@ -90,7 +94,11 @@ bool App::Attach(HWND hwnd,
     ImGui::CreateContext();
     ImPlot::CreateContext();
     ImGui::StyleColorsDark();
-    ImGui::GetIO().IniFilename = "debug_ui.ini";
+    {
+        ImGuiIO& io    = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.IniFilename  = "debug_ui.ini";
+    }
 
     InitImGui();
 
