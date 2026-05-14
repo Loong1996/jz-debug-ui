@@ -25,9 +25,11 @@ World MakeMockWorld() {
         col32(200, 80,  255),
     };
 
+    // --- Map 0: 主城 (15 entities + walls / water / trap) ---
     for (int i = 0; i < 15; ++i) {
         Entity e{};
         e.id     = static_cast<uint64_t>(1000 + i);
+        e.map_id = 0;
         e.fx     = rng(-10.f, 10.f);
         e.fy     = rng(-10.f, 10.f);
         e.x      = static_cast<int>(roundf(e.fx));
@@ -43,8 +45,9 @@ World MakeMockWorld() {
     w.player_id   = static_cast<int>(w.entities[0].id);
     w.selected_id = w.player_id;
 
-    auto addCell = [&](int x, int y, uint8_t type, uint32_t color, const char* name) {
+    auto addCell = [&](int x, int y, uint8_t type, uint32_t color, const char* name, uint32_t map_id = 0) {
         Cell c{};
+        c.map_id = map_id;
         c.x = x; c.y = y;
         c.type  = type;
         c.color = color;
@@ -60,9 +63,46 @@ World MakeMockWorld() {
     for (int x = -3; x <= -1; ++x)
         for (int y = -3; y <= -1; ++y)
             addCell(x, y, 2, water_col, "Water");
-
-    // Extra cell layered on an existing wall position to exercise overlap display
+    // Layered cell on wall to test overlap display
     addCell(-6, 0, 3, col32(180, 80, 200, 180), "Trap");
+
+    // --- Map 1: 副本 (8 entities + simple arena) ---
+    const uint32_t dungeon_wall = col32(60, 50, 80, 220);
+    const uint32_t lava_col     = col32(200, 60, 20, 180);
+    // Outer walls (5x5 box from -3,-3 to 3,3)
+    for (int x = -3; x <= 3; ++x) {
+        addCell(x, -3, 1, dungeon_wall, "Wall", 1);
+        addCell(x,  3, 1, dungeon_wall, "Wall", 1);
+    }
+    for (int y = -2; y <= 2; ++y) {
+        addCell(-3, y, 1, dungeon_wall, "Wall", 1);
+        addCell( 3, y, 1, dungeon_wall, "Wall", 1);
+    }
+    // Lava pool in centre
+    addCell( 0,  0, 2, lava_col, "Lava", 1);
+    addCell( 1,  0, 2, lava_col, "Lava", 1);
+    addCell(-1,  0, 2, lava_col, "Lava", 1);
+    addCell( 0,  1, 2, lava_col, "Lava", 1);
+    addCell( 0, -1, 2, lava_col, "Lava", 1);
+    // Trap tile layered on a wall (test overlap)
+    addCell(-3, -3, 3, col32(180, 80, 200, 180), "Trap", 1);
+
+    for (int i = 0; i < 8; ++i) {
+        Entity e{};
+        e.id     = static_cast<uint64_t>(2000 + i);
+        e.map_id = 1;
+        e.fx     = rng(-2.f, 2.f);
+        e.fy     = rng(-2.f, 2.f);
+        e.x      = static_cast<int>(roundf(e.fx));
+        e.y      = static_cast<int>(roundf(e.fy));
+        e.vx     = rng(-2.f, 2.f);
+        e.vy     = rng(-2.f, 2.f);
+        e.radius = rng(0.4f, 0.75f);
+        e.color  = palette[(i + 2) % 5];
+        e.type   = static_cast<uint8_t>(i % 2);   // only type 0/1 in dungeon
+        std::snprintf(e.label, sizeof(e.label), "D#%d", static_cast<int>(e.id));
+        w.entities.push_back(e);
+    }
 
     return w;
 }

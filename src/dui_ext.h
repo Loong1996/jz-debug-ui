@@ -24,6 +24,15 @@ void RegisterCellTypeName  (uint8_t type, const char* name);
 const char* GetEntityTypeName(uint8_t type);
 const char* GetCellTypeName  (uint8_t type);
 
+// Register a display name for a map id value.
+void RegisterMapName(uint32_t map_id, const char* name);
+const char* GetMapName(uint32_t map_id);   // nullptr if not registered
+
+// Switch the active map: updates active_map_id, clears cell selection,
+// and sets selected_id to the first entity on the new map (or -1 if none).
+// Camera reset is handled by DrawCanvas on the next frame.
+void SwitchActiveMap(World& w, uint32_t new_map_id);
+
 // Called by the Inspector after rendering built-in fields.
 void InvokeEntityDrawer(Entity& e);
 void InvokeCellDrawer  (Cell& c);

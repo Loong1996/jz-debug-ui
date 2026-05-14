@@ -121,6 +121,43 @@ static void CellTableImpl(World& world, const std::vector<int>& idxs,
 void DrawInspector(World& world) {
     ImGui::Begin(u8"检视器");
 
+    // ---- Map selector ----
+    {
+        uint32_t all_map_ids[64]; int n_all_maps = 0;
+        for (const auto& e : world.entities) {
+            bool dup = false;
+            for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == e.map_id) { dup = true; break; }
+            if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = e.map_id;
+        }
+        for (const auto& c : world.cells) {
+            bool dup = false;
+            for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == c.map_id) { dup = true; break; }
+            if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = c.map_id;
+        }
+        for (int i = 0; i < n_all_maps; ++i)
+            for (int j = i + 1; j < n_all_maps; ++j)
+                if (all_map_ids[j] < all_map_ids[i]) { uint32_t t = all_map_ids[i]; all_map_ids[i] = all_map_ids[j]; all_map_ids[j] = t; }
+        char map_bufs[64][48]; const char* map_items[64];
+        int  map_combo_idx = 0;
+        for (int i = 0; i < n_all_maps; ++i) {
+            int ent_cnt = 0, cell_cnt = 0;
+            for (const auto& e : world.entities) if (e.map_id == all_map_ids[i]) ++ent_cnt;
+            for (const auto& c : world.cells)    if (c.map_id == all_map_ids[i]) ++cell_cnt;
+            const char* mn = GetMapName(all_map_ids[i]);
+            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s (%d/%d)", mn, ent_cnt, cell_cnt);
+            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"地图 %u (%d/%d)", all_map_ids[i], ent_cnt, cell_cnt);
+            map_items[i] = map_bufs[i];
+            if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
+        }
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
+        ImGui::TextUnformatted(u8"地图"); ImGui::SameLine();
+        ImGui::SetNextItemWidth(160.f);
+        if (ImGui::Combo("##insp_map", &map_combo_idx, map_items, n_all_maps) && n_all_maps > 0)
+            SwitchActiveMap(world, all_map_ids[map_combo_idx]);
+        ImGui::PopStyleVar();
+        ImGui::Separator();
+    }
+
     // ---- Static state ----
     static char search[64]       = {};
     static int  type_filter      = -1;
@@ -131,10 +168,11 @@ void DrawInspector(World& world) {
     static int  cell_type_filter = -1;
     static int  cell_sort_mode   = 0;   // 0=默认 1=Type 2=名称 3=坐标
 
-    // ---- Collect unique entity types present this frame ----
+    // ---- Collect unique entity types present this frame (active map only) ----
     int  types[32];
     int  ntypes = 0;
     for (const auto& e : world.entities) {
+        if (e.map_id != world.active_map_id) continue;
         bool dup = false;
         for (int k = 0; k < ntypes; ++k)
             if (types[k] == static_cast<int>(e.type)) { dup = true; break; }
@@ -161,6 +199,7 @@ void DrawInspector(World& world) {
 
     // ---- Filter lambda (supports #1003 for id-exact match) ----
     auto pass_filter = [&](const Entity& e) {
+        if (e.map_id != world.active_map_id) return false;
         if (type_filter != -1 && static_cast<int>(e.type) != type_filter) return false;
         if (search[0] == '\0') return true;
         if (search[0] == '#') {
@@ -183,7 +222,7 @@ void DrawInspector(World& world) {
     // ---- Sort ----
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
-        if (static_cast<int>(e.id) == world.player_id) { player = &e; break; }
+        if (static_cast<int>(e.id) == world.player_id && e.map_id == world.active_map_id) { player = &e; break; }
 
     std::sort(show_idx.begin(), show_idx.end(), [&](int ai, int bi) -> bool {
         const auto& a = world.entities[ai];
@@ -299,12 +338,14 @@ void DrawInspector(World& world) {
             bool has_ov = false;
             for (const auto& e : world.entities) {
                 if (static_cast<int>(e.id) == world.selected_id) continue;
+                if (e.map_id != world.active_map_id) continue;
                 if (e.x == sel_x && e.y == sel_y) { has_ov = true; break; }
             }
             if (has_ov &&
                 ImGui::CollapsingHeader(u8"同坐标其他实体##ov", ImGuiTreeNodeFlags_DefaultOpen)) {
                 for (auto& e : world.entities) {
                     if (static_cast<int>(e.id) == world.selected_id) continue;
+                    if (e.map_id != world.active_map_id) continue;
                     if (e.x != sel_x || e.y != sel_y) continue;
                     ImGui::PushID(static_cast<int>(e.id));
                     char buf[64];
@@ -328,6 +369,7 @@ void DrawInspector(World& world) {
         if (ImGui::CollapsingHeader(cell_hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
             int n = 0;
             for (auto& c : world.cells) {
+                if (c.map_id != world.active_map_id) continue;
                 if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
                 ImGui::PushID(n);
                 const char* ctn = GetCellTypeName(c.type); char cnfb[16];
@@ -351,10 +393,11 @@ void DrawInspector(World& world) {
         // Entities on the selected cell
         bool any_ent = false;
         for (const auto& e : world.entities)
-            if (e.x == world.sel_cell_x && e.y == world.sel_cell_y) { any_ent = true; break; }
+            if (e.map_id == world.active_map_id && e.x == world.sel_cell_x && e.y == world.sel_cell_y) { any_ent = true; break; }
         if (any_ent &&
             ImGui::CollapsingHeader(u8"压在此格的实体##sce", ImGuiTreeNodeFlags_DefaultOpen)) {
             for (auto& e : world.entities) {
+                if (e.map_id != world.active_map_id) continue;
                 if (e.x != world.sel_cell_x || e.y != world.sel_cell_y) continue;
                 bool is_sel = static_cast<int>(e.id) == world.selected_id;
                 ImGui::PushID(static_cast<int>(e.id));
@@ -369,9 +412,10 @@ void DrawInspector(World& world) {
         }
     }
 
-    // ---- Cell list: collect unique types for combo, filter, sort ----
+    // ---- Cell list: collect unique types for combo, filter, sort (active map only) ----
     int  ctypes_all[32]; int nctypes_all = 0;
     for (const auto& c : world.cells) {
+        if (c.map_id != world.active_map_id) continue;
         bool dup = false;
         for (int k = 0; k < nctypes_all; ++k)
             if (ctypes_all[k] == static_cast<int>(c.type)) { dup = true; break; }
@@ -396,6 +440,7 @@ void DrawInspector(World& world) {
             if (ctypes_all[i] == cell_type_filter) { cell_combo_idx = i + 1; break; }
 
     auto pass_cell = [&](const Cell& c) {
+        if (c.map_id != world.active_map_id) return false;
         if (cell_type_filter != -1 && static_cast<int>(c.type) != cell_type_filter) return false;
         if (cell_search[0] == '\0') return true;
         if (std::strstr(c.label, cell_search)) return true;

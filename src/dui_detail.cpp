@@ -29,7 +29,7 @@ void DrawEntityDetail(World& world) {
 
     const Entity* found = nullptr;
     for (const auto& e : world.entities)
-        if (static_cast<int>(e.id) == world.selected_id) { found = &e; break; }
+        if (static_cast<int>(e.id) == world.selected_id && e.map_id == world.active_map_id) { found = &e; break; }
 
     if (!found) {
         ImGui::TextDisabled(u8"(未选中实体)");

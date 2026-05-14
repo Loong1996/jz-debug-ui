@@ -19,7 +19,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::World   world   = dui::MakeMockWorld();
     dui::Metrics metrics;
 
-    // --- Type name registrations ---
+    // --- Map name registrations ---
+    dui::RegisterMapName(0, u8"主城");
+    dui::RegisterMapName(1, u8"副本");
+
+    // --- Entity / cell type name registrations ---
     dui::RegisterEntityTypeName(0, u8"主角");
     dui::RegisterEntityTypeName(1, u8"战士");
     dui::RegisterEntityTypeName(2, u8"法师");

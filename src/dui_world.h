@@ -6,6 +6,7 @@ namespace dui {
 
 struct Entity {
     uint64_t id;
+    uint32_t map_id = 0;
     int      x,  y;
     float    fx, fy;   // float accumulator — drives x/y via rounding
     float    vx, vy;   // velocity (grid units/sec)
@@ -17,6 +18,7 @@ struct Entity {
 };
 
 struct Cell {
+    uint32_t map_id = 0;
     int      x, y;
     uint32_t color;
     uint8_t  type;     // caller-defined tag
@@ -27,6 +29,7 @@ struct Cell {
 struct World {
     std::vector<Entity> entities;
     std::vector<Cell>   cells;
+    uint32_t active_map_id = 0;
     int  selected_id   = -1;
     int  player_id     = -1;
     bool sel_cell_valid = false;

@@ -1,4 +1,5 @@
 #include "dui_canvas.h"
+#include "dui_ext.h"
 #include <imgui.h>
 #include <cmath>
 #include <cstdio>
@@ -13,15 +14,54 @@ void DrawCanvas(World& world, CanvasView* view) {
     static CanvasView s_default_view;
     if (!view) view = &s_default_view;
 
+    // Reset camera when active map changes
+    static uint32_t s_last_drawn_map_id = ~0u;
+    if (world.active_map_id != s_last_drawn_map_id) {
+        view->cam_x = view->cam_y = 0.f;
+        s_last_drawn_map_id = world.active_map_id;
+    }
+
     ImGui::Begin(u8"场景视图");
 
     // --- Find player ---
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
-        if (static_cast<int>(e.id) == world.player_id) { player = &e; break; }
+        if (static_cast<int>(e.id) == world.player_id && e.map_id == world.active_map_id) { player = &e; break; }
 
     // --- Toolbar ---
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
+
+    // Map selector combo
+    {
+        uint32_t all_map_ids[64]; int n_all_maps = 0;
+        for (const auto& e : world.entities) {
+            bool dup = false;
+            for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == e.map_id) { dup = true; break; }
+            if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = e.map_id;
+        }
+        for (const auto& c : world.cells) {
+            bool dup = false;
+            for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == c.map_id) { dup = true; break; }
+            if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = c.map_id;
+        }
+        for (int i = 0; i < n_all_maps; ++i)
+            for (int j = i + 1; j < n_all_maps; ++j)
+                if (all_map_ids[j] < all_map_ids[i]) { uint32_t t = all_map_ids[i]; all_map_ids[i] = all_map_ids[j]; all_map_ids[j] = t; }
+        char map_bufs[64][32]; const char* map_items[64];
+        int  map_combo_idx = 0;
+        for (int i = 0; i < n_all_maps; ++i) {
+            const char* mn = GetMapName(all_map_ids[i]);
+            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s", mn);
+            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"地图 %u", all_map_ids[i]);
+            map_items[i] = map_bufs[i];
+            if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
+        }
+        ImGui::SetNextItemWidth(110.f);
+        if (ImGui::Combo("##cvmap", &map_combo_idx, map_items, n_all_maps) && n_all_maps > 0)
+            SwitchActiveMap(world, all_map_ids[map_combo_idx]);
+        ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+    }
+
     ImGui::Checkbox(u8"格线",   &view->show_grid);   ImGui::SameLine();
     ImGui::Checkbox(u8"格子",   &view->show_cells);  ImGui::SameLine();
     ImGui::Checkbox(u8"实体",   &view->show_ents);   ImGui::SameLine();
@@ -43,7 +83,7 @@ void DrawCanvas(World& world, CanvasView* view) {
         const Entity* target = nullptr;
         if (world.selected_id != -1) {
             for (const auto& e : world.entities)
-                if (static_cast<int>(e.id) == world.selected_id) { target = &e; break; }
+                if (static_cast<int>(e.id) == world.selected_id && e.map_id == world.active_map_id) { target = &e; break; }
         }
         if (!target) target = player;
         if (target) { view->cam_x = target->fx; view->cam_y = target->fy; }
@@ -119,6 +159,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- 1. Map cells (render all, not just in-view) ---
     if (view->show_cells) {
         for (const auto& c : world.cells) {
+            if (c.map_id != world.active_map_id) continue;
             ImVec2 pts[4];
             TileDiamond(static_cast<float>(c.x), static_cast<float>(c.y), pts);
             dl->AddQuadFilled(pts[0], pts[1], pts[2], pts[3], c.color);
@@ -151,7 +192,7 @@ void DrawCanvas(World& world, CanvasView* view) {
         float bcy = player ? player->fy : fcy;
         if (world.selected_id != -1) {
             for (const auto& e : world.entities)
-                if (static_cast<int>(e.id) == world.selected_id) { bcx = e.fx; bcy = e.fy; break; }
+                if (static_cast<int>(e.id) == world.selected_id && e.map_id == world.active_map_id) { bcx = e.fx; bcy = e.fy; break; }
         }
         float hf = static_cast<float>(VIEW_HALF) + 0.5f;
         float fx = bcx, fy = bcy;
@@ -174,6 +215,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- 4. Entities ---
     if (view->show_ents) {
         for (const auto& e : world.entities) {
+            if (e.map_id != world.active_map_id) continue;
             ImVec2 pts[4];
             TileDiamond(e.fx, e.fy, pts);
 
@@ -236,10 +278,10 @@ void DrawCanvas(World& world, CanvasView* view) {
         Hit  hits[32];
         int  nhits = 0;
         for (int i = 0; i < static_cast<int>(world.entities.size()) && nhits < 32; ++i)
-            if (world.entities[i].x == wx && world.entities[i].y == wy)
+            if (world.entities[i].map_id == world.active_map_id && world.entities[i].x == wx && world.entities[i].y == wy)
                 hits[nhits++] = { 0, i };
         for (int i = 0; i < static_cast<int>(world.cells.size()) && nhits < 32; ++i)
-            if (world.cells[i].x == wx && world.cells[i].y == wy)
+            if (world.cells[i].map_id == world.active_map_id && world.cells[i].x == wx && world.cells[i].y == wy)
                 hits[nhits++] = { 1, i };
 
         if (nhits == 0) {
@@ -324,19 +366,19 @@ void DrawCanvas(World& world, CanvasView* view) {
         if (InView(wx, wy)) {
             bool any = false;
             for (const auto& e : world.entities)
-                if (e.x == wx && e.y == wy) { any = true; break; }
+                if (e.map_id == world.active_map_id && e.x == wx && e.y == wy) { any = true; break; }
             if (!any)
                 for (const auto& c : world.cells)
-                    if (c.x == wx && c.y == wy) { any = true; break; }
+                    if (c.map_id == world.active_map_id && c.x == wx && c.y == wy) { any = true; break; }
             if (any) {
                 ImGui::BeginTooltip();
                 ImGui::Text("(%d, %d)", wx, wy);
                 ImGui::Separator();
                 for (const auto& e : world.entities)
-                    if (e.x == wx && e.y == wy)
+                    if (e.map_id == world.active_map_id && e.x == wx && e.y == wy)
                         ImGui::Text(u8"[E type %d] %s", e.type, e.label);
                 for (const auto& c : world.cells)
-                    if (c.x == wx && c.y == wy)
+                    if (c.map_id == world.active_map_id && c.x == wx && c.y == wy)
                         ImGui::Text(u8"[C type %d] %s", c.type, c.label);
                 ImGui::EndTooltip();
             }

@@ -4,10 +4,11 @@
 #include <unordered_map>
 
 namespace {
-    std::unordered_map<uint8_t, dui::EntityDrawer> g_entity_drawers;
-    std::unordered_map<uint8_t, dui::CellDrawer>   g_cell_drawers;
-    std::unordered_map<uint8_t, std::string>        g_entity_type_names;
-    std::unordered_map<uint8_t, std::string>        g_cell_type_names;
+    std::unordered_map<uint8_t,  dui::EntityDrawer> g_entity_drawers;
+    std::unordered_map<uint8_t,  dui::CellDrawer>   g_cell_drawers;
+    std::unordered_map<uint8_t,  std::string>        g_entity_type_names;
+    std::unordered_map<uint8_t,  std::string>        g_cell_type_names;
+    std::unordered_map<uint32_t, std::string>        g_map_names;
 }
 
 namespace dui {
@@ -33,6 +34,25 @@ const char* GetEntityTypeName(uint8_t type) {
 const char* GetCellTypeName(uint8_t type) {
     auto it = g_cell_type_names.find(type);
     return it != g_cell_type_names.end() ? it->second.c_str() : nullptr;
+}
+
+void RegisterMapName(uint32_t map_id, const char* name) {
+    g_map_names[map_id] = name ? name : "";
+}
+const char* GetMapName(uint32_t map_id) {
+    auto it = g_map_names.find(map_id);
+    return it != g_map_names.end() ? it->second.c_str() : nullptr;
+}
+void SwitchActiveMap(World& w, uint32_t new_map_id) {
+    w.active_map_id  = new_map_id;
+    w.sel_cell_valid = false;
+    w.selected_id    = -1;
+    for (const auto& e : w.entities) {
+        if (e.map_id == new_map_id) {
+            w.selected_id = static_cast<int>(e.id);
+            break;
+        }
+    }
 }
 
 void InvokeEntityDrawer(Entity& e) {
