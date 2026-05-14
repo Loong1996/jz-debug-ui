@@ -345,16 +345,22 @@ void DrawCanvas(World& world, CanvasView* view) {
                 }
             }
 
-            // Player marker: downward triangle floating above all player-type entities
-            if (IsPlayerEntityType(e.type)) {
-                float ts     = fmaxf(th * 0.35f, 4.f);
-                float tip_y  = pts[0].y - ts * 0.4f;
-                float base_y = tip_y - ts * 1.2f;
-                dl->AddTriangleFilled(
-                    ImVec2(pts[0].x - ts, base_y),
-                    ImVec2(pts[0].x + ts, base_y),
-                    ImVec2(pts[0].x,      tip_y),
-                    IM_COL32(255, 220, 80, 230));
+            // Entity marker: per-entity color takes priority; falls back to player-type yellow.
+            {
+                const uint32_t* mc = GetEntityMarker(e.id);
+                uint32_t col = mc ? *mc
+                             : IsPlayerEntityType(e.type) ? IM_COL32(255, 220, 80, 230)
+                             : 0u;
+                if (col) {
+                    float ts     = fmaxf(th * 0.35f, 4.f);
+                    float tip_y  = pts[0].y - ts * 0.4f;
+                    float base_y = tip_y - ts * 1.2f;
+                    dl->AddTriangleFilled(
+                        ImVec2(pts[0].x - ts, base_y),
+                        ImVec2(pts[0].x + ts, base_y),
+                        ImVec2(pts[0].x,      tip_y),
+                        col);
+                }
             }
 
             // Label

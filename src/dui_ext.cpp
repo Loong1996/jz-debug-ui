@@ -10,6 +10,7 @@ namespace {
     std::unordered_map<uint8_t,  std::string>           g_cell_type_names;
     std::unordered_map<uint32_t, std::string>           g_map_names;
     std::unordered_map<uint8_t,  dui::EntityLabelFn>    g_label_fns;
+    std::unordered_map<uint64_t, uint32_t>               g_entity_markers;
     uint8_t g_player_entity_type = 255;
     bool    g_player_type_set    = false;
 }
@@ -83,6 +84,17 @@ std::string InvokeEntityLabel(const Entity& e) {
     auto it = g_label_fns.find(e.type);
     if (it != g_label_fns.end()) return it->second(e);
     return e.label;
+}
+
+void SetEntityMarker(uint64_t entity_id, uint32_t color) {
+    g_entity_markers[entity_id] = color;
+}
+void ClearEntityMarker(uint64_t entity_id) {
+    g_entity_markers.erase(entity_id);
+}
+const uint32_t* GetEntityMarker(uint64_t entity_id) {
+    auto it = g_entity_markers.find(entity_id);
+    return it != g_entity_markers.end() ? &it->second : nullptr;
 }
 
 } // namespace dui

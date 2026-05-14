@@ -42,6 +42,14 @@ void InvokeCellDrawer  (Cell& c);
 void SetPlayerEntityType(uint8_t type);
 bool IsPlayerEntityType (uint8_t type);
 
+// Per-entity marker: draw a downward triangle above a specific entity instance.
+// color is ImU32 (IM_COL32). Call ClearEntityMarker to remove.
+// Per-entity marker takes precedence over the player-type marker if both apply.
+void        SetEntityMarker  (uint64_t entity_id, uint32_t color);
+void        ClearEntityMarker(uint64_t entity_id);
+// Returns nullptr if no per-entity marker is registered.
+const uint32_t* GetEntityMarker(uint64_t entity_id);
+
 // Register a function that returns the short text shown above an entity on the Canvas.
 // Returning an empty string hides the label. Unregistered types fall back to e.label.
 using EntityLabelFn = std::function<std::string(const Entity&)>;

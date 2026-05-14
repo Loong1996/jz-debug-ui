@@ -40,6 +40,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     // --- All type-0 entities are players; Canvas shows yellow triangle marker above them ---
     dui::SetPlayerEntityType(0);
 
+    // --- Per-entity marker demo: mark entity #1002 (a warrior) with a red triangle ---
+    dui::SetEntityMarker(1002, IM_COL32(255, 80, 80, 230));
+
     // --- Detail panel demo: pre-formatted multi-line text for type-1 entities ---
     dui::RegisterEntityDetailText(1, [](const dui::Entity& e) -> std::string {
         char buf[512];
