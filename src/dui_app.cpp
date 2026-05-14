@@ -1,4 +1,5 @@
 #include "dui_app.h"
+#include "dui_hotkeys.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_win32.h>
@@ -71,6 +72,7 @@ bool App::Init(int width, int height, const wchar_t* title) {
 
     ImGui_ImplWin32_Init(hwnd_);
     ImGui_ImplDX11_Init(device_, ctx_);
+    LoadHotkeys();
     return true;
 }
 
@@ -105,6 +107,7 @@ bool App::Attach(HWND hwnd,
 
     ImGui_ImplWin32_Init(hwnd_);
     ImGui_ImplDX11_Init(device_, ctx_);
+    LoadHotkeys();
     return true;
 }
 
@@ -218,6 +221,7 @@ void App::ApplyBuiltinLayout(ImGuiID dsid) {
     ImGui::DockBuilderDockWindow(u8"监视",     bot);
     ImGui::DockBuilderDockWindow(u8"性能指标", bot);
     ImGui::DockBuilderDockWindow(u8"命令",     bot);
+    ImGui::DockBuilderDockWindow(u8"事件",     bot);
     ImGui::DockBuilderFinish(dsid);
 }
 
@@ -235,6 +239,7 @@ bool App::Tick(const std::function<void()>& draw_fn) {
         }
     }
 
+    ProcessHotkeys();
     draw_fn();
     EndFrame();
     return true;

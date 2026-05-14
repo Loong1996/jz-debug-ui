@@ -2,6 +2,7 @@
 #include <imgui.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace {
     std::unordered_map<uint8_t,  dui::EntityDrawer>    g_entity_drawers;
@@ -13,6 +14,15 @@ namespace {
     std::unordered_map<uint64_t, uint32_t>               g_entity_markers;
     uint8_t g_player_entity_type = 255;
     bool    g_player_type_set    = false;
+
+    // Overlay registries
+    std::unordered_map<uint8_t, dui::EntityOverlayFn> g_entity_overlays;
+    struct GlobalOverlay { std::string name; dui::GlobalOverlayFn fn; };
+    std::vector<GlobalOverlay> g_global_overlays;
+
+    // Thread-local canvas view state (set each frame by DrawCanvas)
+    struct CanvasViewState { float fcx, fcy, th; ImVec2 center; };
+    thread_local CanvasViewState s_cv_view = {};
 }
 
 namespace dui {
@@ -95,6 +105,48 @@ void ClearEntityMarker(uint64_t entity_id) {
 const uint32_t* GetEntityMarker(uint64_t entity_id) {
     auto it = g_entity_markers.find(entity_id);
     return it != g_entity_markers.end() ? &it->second : nullptr;
+}
+
+void RegisterEntityOverlay(uint8_t type, EntityOverlayFn fn) {
+    g_entity_overlays[type] = std::move(fn);
+}
+
+void RegisterGlobalOverlay(const char* name, GlobalOverlayFn fn) {
+    if (!name) return;
+    for (auto& g : g_global_overlays) {
+        if (g.name == name) { g.fn = std::move(fn); return; }
+    }
+    g_global_overlays.push_back({ std::string(name), std::move(fn) });
+}
+
+void UnregisterGlobalOverlay(const char* name) {
+    if (!name) return;
+    for (auto it = g_global_overlays.begin(); it != g_global_overlays.end(); ++it) {
+        if (it->name == name) { g_global_overlays.erase(it); return; }
+    }
+}
+
+void SetCanvasViewState_(float fcx, float fcy, float th, ImVec2 center) {
+    s_cv_view = { fcx, fcy, th, center };
+}
+
+ImVec2 CanvasToScreen_(float wx, float wy) {
+    float dx = wx - s_cv_view.fcx, dy = wy - s_cv_view.fcy;
+    return ImVec2(s_cv_view.center.x + (dx - dy) * s_cv_view.th,
+                  s_cv_view.center.y + (dx + dy) * s_cv_view.th);
+}
+
+void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl) {
+    auto it = g_entity_overlays.find(e.type);
+    if (it == g_entity_overlays.end()) return;
+    CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
+    it->second(e, ctx);
+}
+
+void InvokeGlobalOverlays_(const World& world, ImDrawList* dl) {
+    CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
+    for (const auto& g : g_global_overlays)
+        if (g.fn) g.fn(world, ctx);
 }
 
 } // namespace dui

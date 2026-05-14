@@ -1,4 +1,5 @@
 #include "dui_metrics.h"
+#include "dui_user_metrics.h"
 #include <imgui.h>
 #include <implot.h>
 
@@ -28,6 +29,7 @@ void DrawMetrics(const Metrics& m) {
             ImPlot::EndPlot();
         }
     }
+    DrawUserMetrics();
     ImGui::End();
 }
 

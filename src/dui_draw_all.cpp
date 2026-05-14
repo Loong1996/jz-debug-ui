@@ -5,6 +5,7 @@
 #include "dui_log.h"
 #include "dui_commands.h"
 #include "dui_detail.h"
+#include "dui_events.h"
 
 namespace dui {
 
@@ -16,6 +17,7 @@ void DrawAll(World& world, Metrics& metrics) {
     DrawWatch();
     DrawCommands();
     DrawEntityDetail(world);
+    DrawEvents();
 }
 
 } // namespace dui

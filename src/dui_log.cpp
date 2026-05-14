@@ -1,25 +1,21 @@
 #include "dui_log.h"
 #include "dui_metrics.h"
 #include <imgui.h>
+#include <windows.h>
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
+#include <string>
 #include <vector>
 
 namespace dui {
 namespace {
 
-static const auto s_start = std::chrono::steady_clock::now();
-
-static float now_sec() {
-    return std::chrono::duration<float>(
-        std::chrono::steady_clock::now() - s_start).count();
-}
-
 struct LogEntry {
     LogLevel level;
-    float    time;
+    char     ts[16];   // "HH:MM:SS.mmm"
     char     text[256];
 };
 
@@ -31,12 +27,63 @@ struct WatchEntry {
 static RingBuffer<LogEntry, 1000> s_log;
 static std::vector<WatchEntry>    s_watch;
 
+static void make_timestamp(char* buf, size_t n) {
+    using namespace std::chrono;
+    auto now    = system_clock::now();
+    auto ms     = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+    auto t      = system_clock::to_time_t(now);
+    struct tm tm_local;
+#ifdef _WIN32
+    localtime_s(&tm_local, &t);
+#else
+    localtime_r(&t, &tm_local);
+#endif
+    std::snprintf(buf, n, "%02d:%02d:%02d.%03d",
+        tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec,
+        static_cast<int>(ms.count()));
+}
+
 static void push_log(LogLevel level, const char* fmt, va_list ap) {
     LogEntry e{};
     e.level = level;
-    e.time  = now_sec();
+    make_timestamp(e.ts, sizeof(e.ts));
     std::vsnprintf(e.text, sizeof(e.text), fmt, ap);
     s_log.push(e);
+}
+
+static bool export_log(const char* filter, bool show_info, bool show_warn, bool show_error) {
+    OPENFILENAMEW ofn = {};
+    wchar_t path[MAX_PATH] = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile   = path;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = L"txt";
+    if (!GetSaveFileNameW(&ofn)) return false;
+
+    FILE* f = nullptr;
+    _wfopen_s(&f, path, L"wb");
+    if (!f) return false;
+    // UTF-8 BOM
+    const unsigned char bom[3] = { 0xEF, 0xBB, 0xBF };
+    fwrite(bom, 1, 3, f);
+
+    const int n     = s_log.size();
+    const int cap   = s_log.capacity();
+    const int start = s_log.plot_offset();
+    for (int i = 0; i < n; i++) {
+        const LogEntry& e = s_log.data()[(start + i) % cap];
+        if (!show_info  && e.level == LogLevel::Info)  continue;
+        if (!show_warn  && e.level == LogLevel::Warn)  continue;
+        if (!show_error && e.level == LogLevel::Error) continue;
+        if (filter[0] && std::strstr(e.text, filter) == nullptr) continue;
+        const char* lv = e.level == LogLevel::Error ? "[ERR] "
+                       : e.level == LogLevel::Warn  ? "[WRN] " : "[INF] ";
+        std::fprintf(f, "[%s] %s%s\n", e.ts, lv, e.text);
+    }
+    fclose(f);
+    return true;
 }
 
 } // anonymous namespace
@@ -87,8 +134,31 @@ void DrawLog() {
     ImGui::Checkbox("Info",  &show_info);  ImGui::SameLine();
     ImGui::Checkbox("Warn",  &show_warn);  ImGui::SameLine();
     ImGui::Checkbox("Error", &show_error); ImGui::SameLine();
-    ImGui::SetNextItemWidth(-1.f);
+    ImGui::SetNextItemWidth(120.f);
     ImGui::InputText(u8"##过滤", filter, sizeof(filter));
+    ImGui::SameLine();
+    if (ImGui::SmallButton(u8"复制全部")) {
+        // Build clipboard string from visible entries
+        std::string clip;
+        const int n     = s_log.size();
+        const int cap   = s_log.capacity();
+        const int start = s_log.plot_offset();
+        for (int i = 0; i < n; i++) {
+            const LogEntry& e = s_log.data()[(start + i) % cap];
+            if (!show_info  && e.level == LogLevel::Info)  continue;
+            if (!show_warn  && e.level == LogLevel::Warn)  continue;
+            if (!show_error && e.level == LogLevel::Error) continue;
+            if (filter[0] && std::strstr(e.text, filter) == nullptr) continue;
+            char line[300];
+            std::snprintf(line, sizeof(line), "[%s] %s\n", e.ts, e.text);
+            clip += line;
+        }
+        ImGui::SetClipboardText(clip.c_str());
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(u8"导出...")) {
+        export_log(filter, show_info, show_warn, show_error);
+    }
     ImGui::PopStyleVar();
 
     ImGui::Separator();
@@ -117,8 +187,25 @@ void DrawLog() {
         else                                  col = ImVec4(0.85f, 0.85f, 0.85f, 1.f);
 
         char line[320];
-        std::snprintf(line, sizeof(line), "[%.2f] %s", e.time, e.text);
-        ImGui::TextColored(col, "%s", line);
+        std::snprintf(line, sizeof(line), "[%s] %s", e.ts, e.text);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, col);
+        ImGui::PushID(i);
+        ImGui::Selectable(line, false, ImGuiSelectableFlags_None);
+        if (ImGui::BeginPopupContextItem("##log_ctx")) {
+            if (ImGui::MenuItem(u8"复制此行")) {
+                ImGui::SetClipboardText(line);
+            }
+            if (ImGui::MenuItem(u8"过滤此前缀")) {
+                const char* sp = std::strchr(e.text, ':');
+                size_t plen = sp ? static_cast<size_t>(sp - e.text + 1) : 0;
+                if (plen > 0 && plen < sizeof(filter))
+                    std::snprintf(filter, plen + 1, "%s", e.text);
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+        ImGui::PopStyleColor();
     }
 
     if (at_bottom)

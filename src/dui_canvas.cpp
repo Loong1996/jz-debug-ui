@@ -214,6 +214,8 @@ void DrawCanvas(World& world, CanvasView* view) {
         return ImVec2(center.x + (dx - dy) * th, center.y + (dx + dy) * th);
     };
 
+    SetCanvasViewState_(fcx, fcy, th, center);
+
     auto ToWorld = [&](ImVec2 s, int& ox, int& oy) {
         float rx = s.x - center.x, ry = s.y - center.y;
         ox = static_cast<int>(roundf(fcx + (rx + ry) / (2.f * th)));
@@ -382,6 +384,15 @@ void DrawCanvas(World& world, CanvasView* view) {
         TileDiamond(static_cast<float>(world.sel_cell_x), static_cast<float>(world.sel_cell_y), pts);
         dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(50, 220, 255, 255), 2.f);
     }
+
+    // --- 5b. Entity + global overlays ---
+    if (view->show_ents) {
+        for (const auto& e : world.entities) {
+            if (e.map_id != world.active_map_id) continue;
+            InvokeEntityOverlays_(world, e, dl);
+        }
+    }
+    InvokeGlobalOverlays_(world, dl);
 
     // --- 6. Axis indicator ---
     dl->PopClipRect();

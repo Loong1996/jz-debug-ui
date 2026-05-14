@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <string>
 
+struct ImDrawList;
+struct ImVec2;
+
 namespace dui {
 
 // Callback types for rendering custom fields in the Inspector detail pane.
@@ -55,5 +58,31 @@ const uint32_t* GetEntityMarker(uint64_t entity_id);
 using EntityLabelFn = std::function<std::string(const Entity&)>;
 void        RegisterEntityLabelFn(uint8_t type, EntityLabelFn fn);
 std::string InvokeEntityLabel    (const Entity& e);
+
+// ---- Canvas Overlay API ----
+// Callbacks are invoked during DrawCanvas while the clip rect is active.
+// ToScreen converts world-space coordinates to screen pixels.
+
+struct CanvasOverlayCtx {
+    ImVec2 (*ToScreen)(float wx, float wy);  // reads thread_local view state set by DrawCanvas
+    ImDrawList* dl;
+};
+
+using EntityOverlayFn = std::function<void(const Entity&, const CanvasOverlayCtx&)>;
+using GlobalOverlayFn = std::function<void(const World&,  const CanvasOverlayCtx&)>;
+
+// Per-type overlay: called once per entity of that type each frame.
+void RegisterEntityOverlay(uint8_t type, EntityOverlayFn fn);
+
+// World-level overlay: called once per frame regardless of entity type.
+// name is used for deduplication (registering again with same name overwrites).
+void RegisterGlobalOverlay  (const char* name, GlobalOverlayFn fn);
+void UnregisterGlobalOverlay(const char* name);
+
+// Internal — called by DrawCanvas.
+void SetCanvasViewState_(float fcx, float fcy, float th, ImVec2 center);
+ImVec2 CanvasToScreen_(float wx, float wy);
+void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl);
+void InvokeGlobalOverlays_(const World& world, ImDrawList* dl);
 
 } // namespace dui
