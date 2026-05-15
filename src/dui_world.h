@@ -40,6 +40,7 @@ struct Entity {
     Entity& SetColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 220) {
         color = RGBA(r, g, b, a); return *this;
     }
+    Entity& SetColor(uint32_t packed) { color = packed; return *this; }
     Entity& SetLabel(const char* fmt, ...) {
         va_list ap; va_start(ap, fmt);
         vsnprintf(label, sizeof(label), fmt, ap);
@@ -63,6 +64,7 @@ struct Cell {
     Cell& SetColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 220) {
         color = RGBA(r, g, b, a); return *this;
     }
+    Cell& SetColor(uint32_t packed) { color = packed; return *this; }
     Cell& SetLabel(const char* fmt, ...) {
         va_list ap; va_start(ap, fmt);
         vsnprintf(label, sizeof(label), fmt, ap);
