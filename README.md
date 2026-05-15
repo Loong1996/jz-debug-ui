@@ -136,6 +136,31 @@ if (g_dui_enabled)
 #endif
 ```
 
+**项目源文件为 GBK 编码时**
+
+`dui.props` 只设置了 `/execution-charset:utf-8`（运行期字符串编码），不强制修改源文件编码，因此 GBK 项目可以直接导入，编译不受影响。
+
+但 ImGui 显示字符串只认 UTF-8，如果你在调用 dui API 时传入了 GBK 字面量，需要先做转换：
+
+```cpp
+// 工具函数：GBK → UTF-8
+std::string GbkToUtf8(const char* gbk) {
+    int wlen = MultiByteToWideChar(CP_ACP, 0, gbk, -1, nullptr, 0);
+    std::wstring ws(wlen, 0);
+    MultiByteToWideChar(CP_ACP, 0, gbk, -1, ws.data(), wlen);
+    int ulen = WideCharToMultiByte(CP_UTF8, 0, ws.data(), -1, nullptr, 0, nullptr, nullptr);
+    std::string utf8(ulen, 0);
+    WideCharToMultiByte(CP_UTF8, 0, ws.data(), -1, utf8.data(), ulen, nullptr, nullptr);
+    return utf8;
+}
+
+// 传给 dui 前转换
+dui::Log(GbkToUtf8("玩家死亡").c_str());
+dui::Watch(GbkToUtf8("当前状态").c_str(), state);
+```
+
+也可以只把包含 dui 调用的 `.cpp` 文件单独保存为 UTF-8 编码，其余文件保持 GBK 不动。
+
 ---
 
 ### CMake 项目引入

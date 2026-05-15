@@ -22,7 +22,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(DuiRoot)src;$(DuiRoot)third_party\imgui;$(DuiRoot)third_party\imgui\backends;$(DuiRoot)third_party\implot;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/execution-charset:utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(DuiLibDir);$(DuiImGuiLibDir);$(DuiImPlotLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
