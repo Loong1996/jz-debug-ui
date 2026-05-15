@@ -192,6 +192,25 @@ while (app.Tick([&]() {
 }
 ```
 
+**字体配置**
+
+Init 模式下会自动加载 `assets/fonts/LXGWWenKai-Regular.ttf`（随 Demo 附带），找不到时回退到 ImGui 内置字体（仅 ASCII，中文显示为方块）。
+
+用 `SetFontPath` 在 `Init` 之前指定字体，可以用项目自带字体或 Windows 系统字体：
+
+```cpp
+// 项目自带字体
+app.SetFontPath("assets/fonts/MyFont.ttf", 18.f);
+
+// Windows 系统字体（无需附带文件）
+app.SetFontPath("C:/Windows/Fonts/msyh.ttc", 18.f);   // 微软雅黑
+app.SetFontPath("C:/Windows/Fonts/simsun.ttc", 16.f);  // 宋体
+
+app.Init(1280, 720, L"Debug UI");
+```
+
+字符集覆盖常用简体汉字（约 2500 字，`GetGlyphRangesChineseSimplifiedCommon`），满足调试面板日常需求。
+
 **自定义停靠布局**
 
 默认布局在首次启动（无 ini 时）自动应用。如需自定义，在 `Init` 之前调用：
@@ -237,6 +256,7 @@ dui 附着到游戏已有的 D3D11 上下文，渲染叠加在游戏画面上，
 ```cpp
 // 游戏已有：HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* ctx, IDXGISwapChain* sc
 dui::App dui_app;
+dui_app.SetFontPath("C:/Windows/Fonts/msyh.ttc", 18.f);  // 需要中文时必须在 Attach 前设置
 dui_app.Attach(hwnd, dev, ctx, sc);
 
 // 在游戏渲染阶段每帧调用（Present 之前）：
