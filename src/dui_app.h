@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d11.h>
+#include <chrono>
 #include <functional>
 #include <imgui.h>
 
@@ -48,7 +49,10 @@ public:
 
     // Convenience: PumpMessages + BeginFrame + draw_fn() + EndFrame.
     // Only valid in Init (self-hosted) mode.
-    bool Tick(const std::function<void()>& draw_fn);
+    bool Tick(const std::function<void()>&     draw_fn);
+    bool Tick(const std::function<void(float)>& draw_fn);  // dt variant — built-in clock, clamped to 50ms
+
+    float GetDt() const { return dt_; }  // last frame's dt (seconds, clamped)
 
 private:
     HWND                    hwnd_      = nullptr;
@@ -60,6 +64,8 @@ private:
     bool owns_device_   = false;
     bool owns_window_   = false;
     bool layout_inited_ = false;
+    std::chrono::steady_clock::time_point last_tick_ = std::chrono::steady_clock::now();
+    float dt_ = 0.f;
     std::function<void(ImGuiID)> custom_layout_fn_;
     char  font_path_[512] = {};
     float font_size_      = 18.f;

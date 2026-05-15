@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <chrono>
 #include "dui_app.h"
 #include "dui_world.h"
 #include "dui_mock.h"
@@ -15,16 +14,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::Metrics metrics;
     dui::demo::SetupRegistrations(world);
 
-    using Clock = std::chrono::steady_clock;
-    auto last_tick  = Clock::now();
-    int  tick_count = 0;
-
-    while (app.Tick([&]() { dui::DrawAll(world, metrics); })) {
-        auto  now = Clock::now();
-        float dt  = std::chrono::duration<float>(now - last_tick).count();
-        if (dt > 0.05f) dt = 0.05f;
-        last_tick = now;
+    int tick_count = 0;
+    while (app.Tick([&](float dt) {
+        dui::DrawAll(world, metrics);
         dui::demo::PerFrameDemo(world, metrics, dt, tick_count);
-    }
+    })) {}
     return 0;
 }

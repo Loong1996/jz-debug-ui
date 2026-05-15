@@ -53,6 +53,16 @@ const char* GetCellTypeName(uint8_t type) {
 void RegisterMapName(uint32_t map_id, const char* name) {
     g_map_names[map_id] = name ? name : "";
 }
+
+void RegisterEntityTypeNames(std::initializer_list<std::pair<uint8_t, const char*>> entries) {
+    for (const auto& p : entries) RegisterEntityTypeName(p.first, p.second);
+}
+void RegisterCellTypeNames(std::initializer_list<std::pair<uint8_t, const char*>> entries) {
+    for (const auto& p : entries) RegisterCellTypeName(p.first, p.second);
+}
+void RegisterMapNames(std::initializer_list<std::pair<uint32_t, const char*>> entries) {
+    for (const auto& p : entries) RegisterMapName(p.first, p.second);
+}
 const char* GetMapName(uint32_t map_id) {
     auto it = g_map_names.find(map_id);
     return it != g_map_names.end() ? it->second.c_str() : nullptr;

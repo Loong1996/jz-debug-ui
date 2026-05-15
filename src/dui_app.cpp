@@ -225,6 +225,14 @@ void App::ApplyBuiltinLayout(ImGuiID dsid) {
     ImGui::DockBuilderFinish(dsid);
 }
 
+bool App::Tick(const std::function<void(float)>& draw_fn) {
+    auto now = std::chrono::steady_clock::now();
+    dt_ = std::chrono::duration<float>(now - last_tick_).count();
+    if (dt_ > 0.05f) dt_ = 0.05f;
+    last_tick_ = now;
+    return Tick([&]() { draw_fn(dt_); });
+}
+
 bool App::Tick(const std::function<void()>& draw_fn) {
     if (!PumpMessages()) return false;
     BeginFrame();

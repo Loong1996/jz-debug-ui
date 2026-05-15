@@ -8,27 +8,34 @@
 #include "dui_hotkeys.h"
 #include "dui_mock.h"
 #include <imgui.h>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 
 namespace dui {
 namespace demo {
 
+static Metric s_m_ai_ms;
+static Metric s_m_ai_nodes;
+
 void SetupRegistrations(World& world) {
     World* wp = &world;
 
-    // Map names
-    RegisterMapName(0, u8"主城");
-    RegisterMapName(1, u8"副本");
+    RegisterMapNames({
+        { 0, u8"主城" },
+        { 1, u8"副本" },
+    });
 
-    // Entity / cell type names
-    RegisterEntityTypeName(0, u8"主角");
-    RegisterEntityTypeName(1, u8"战士");
-    RegisterEntityTypeName(2, u8"法师");
-    RegisterCellTypeName(1, u8"墙壁");
-    RegisterCellTypeName(2, u8"水域");
-    RegisterCellTypeName(3, u8"陷阱");
+    RegisterEntityTypeNames({
+        { 0, u8"主角" },
+        { 1, u8"战士" },
+        { 2, u8"法师" },
+    });
+
+    RegisterCellTypeNames({
+        { 1, u8"墙壁" },
+        { 2, u8"水域" },
+        { 3, u8"陷阱" },
+    });
 
     // Custom Inspector fields for type-1 entities
     RegisterEntityDrawer(1, [](Entity& e) {
@@ -41,27 +48,20 @@ void SetupRegistrations(World& world) {
     // Per-entity marker: entity #1002 (a warrior) gets a red triangle
     SetEntityMarker(1002, IM_COL32(255, 80, 80, 230));
 
-    // Detail panel: pre-formatted text for type-1 entities
-    RegisterEntityDetailText(1, [](const Entity& e) -> std::string {
-        char buf[512];
-        std::snprintf(buf, sizeof(buf),
-            "=== \xe5\x9f\xba\xe7\xa1\x80 ===\n"
-            "ID    : %llu\n"
-            "Type  : %u\n"
-            "Label : %s\n"
-            "\n"
-            "=== \xe7\x89\xa9\xe7\x90\x86 ===\n"
-            "Pos   : (%.2f, %.2f)\n"
-            "Vel   : (%.2f, %.2f)\n"
-            "Radius: %.2f\n"
-            "\n"
-            "=== \xe6\xb8\xb2\xe6\x9f\x93 ===\n"
-            "Color : 0x%08X\n",
-            static_cast<unsigned long long>(e.id),
-            static_cast<unsigned>(e.type), e.label,
-            e.fx, e.fy, e.vx, e.vy, e.radius,
-            static_cast<unsigned>(e.color));
-        return buf;
+    // Detail panel: builder style for type-1 entities
+    RegisterEntityDetailText(1, [](const Entity& e, DetailBuilder& db) {
+        db.Section(u8"基础")
+          .KV("ID",    e.id)
+          .KV("Type",  static_cast<int>(e.type))
+          .KV("Label", e.label)
+          .Blank()
+          .Section(u8"物理")
+          .KVFmt(u8"Pos", "(%.2f, %.2f)", e.fx, e.fy)
+          .KVFmt(u8"Vel", "(%.2f, %.2f)", e.vx, e.vy)
+          .KV(u8"Radius", e.radius)
+          .Blank()
+          .Section(u8"渲染")
+          .KVFmt(u8"Color", "0x%08X", static_cast<unsigned>(e.color));
     });
 
     // Canvas overlay: draw velocity vector for type-1 entities
@@ -97,41 +97,34 @@ void SetupRegistrations(World& world) {
         LogWarn(u8"all entities cleared");
     });
     RegisterCommand(u8"Player/传送到原点", [wp] {
-        if (!wp->entities.empty()) {
-            auto& p = wp->entities[0];
-            p.x = p.y = 0; p.fx = p.fy = 0.f;
-        }
+        if (!wp->entities.empty())
+            wp->entities[0].SetPos(0.f, 0.f).SetVel(0.f, 0.f);
     });
     RegisterCommand(u8"Player/停止移动", [wp] {
         if (!wp->entities.empty()) {
-            auto& p = wp->entities[0];
-            p.vx = p.vy = 0.f;
+            wp->entities[0].SetVel(0.f, 0.f);
             Log(u8"player stopped");
         }
     });
 
     // Parameterized command: teleport player to custom coords
-    static const CommandArg kTeleportArgs[] = {
-        { "X", ArgType::Int,   {}, nullptr, nullptr, 0, -50.f, 50.f },
-        { "Y", ArgType::Int,   {}, nullptr, nullptr, 0, -50.f, 50.f },
-    };
-    RegisterCommandWithArgs(u8"Player/传送到坐标", kTeleportArgs, 2,
-        [wp](const CommandArgValue* v, int) {
-            if (!wp->entities.empty()) {
-                auto& p = wp->entities[0];
-                p.x = v[0].i; p.fx = static_cast<float>(v[0].i);
-                p.y = v[1].i; p.fy = static_cast<float>(v[1].i);
-                p.vx = p.vy = 0.f;
-                Log(u8"teleported player to (%d, %d)", v[0].i, v[1].i);
-            }
-        });
+    RegisterCommandWithArgs(u8"Player/传送到坐标", {
+        CommandArg::Int("X", 0, -50.f, 50.f),
+        CommandArg::Int("Y", 0, -50.f, 50.f),
+    }, [wp](const CommandArgValue* v, int) {
+        if (!wp->entities.empty()) {
+            wp->entities[0].SetPos(static_cast<float>(v[0].i), static_cast<float>(v[1].i))
+                           .SetVel(0.f, 0.f);
+            Log(u8"teleported player to (%d, %d)", v[0].i, v[1].i);
+        }
+    });
 
     // Hotkey: F5 resets the world
     BindHotkey(ImGuiKey_F5, 0, u8"World/重置世界");
 
-    // Metric configuration
-    ConfigureMetric("ai/decision_ms", { "ms" });
-    ConfigureMetric("ai/path_nodes",  { "nodes", 0.f, 30.f });
+    // Metric configuration — store handles for zero-lookup Push
+    s_m_ai_ms    = ConfigureMetric("ai/decision_ms", { "ms" });
+    s_m_ai_nodes = ConfigureMetric("ai/path_nodes",  { "nodes", 0.f, 30.f });
 }
 
 void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
@@ -142,48 +135,36 @@ void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
         std::chrono::duration<float>(Clock::now() - t0).count() * 1000.f);
     metrics.entity_count.push(static_cast<float>(world.entities.size()));
 
-    // User metrics demo
-    PushMetric("ai/decision_ms",
-        0.1f + (std::rand() % 100) * 0.003f);
-    PushMetric("ai/path_nodes",
-        static_cast<float>(5 + std::rand() % 20));
+    s_m_ai_ms.Push(0.1f + (std::rand() % 100) * 0.003f);
+    s_m_ai_nodes.Push(static_cast<float>(5 + std::rand() % 20));
 
     static float log_acc   = 0.f;
     static float event_acc = 0.f;
-    log_acc   += dt;
-    event_acc += dt;
 
-    if (log_acc >= 1.f) {
-        log_acc -= 1.f;
+    if (EveryNSeconds(1.0f, dt, log_acc)) {
         Log(u8"tick #%d", tick_count);
         if (tick_count % 5  == 0) LogWarn(u8"每5帧警告: count=%d", tick_count);
         if (tick_count % 13 == 0) LogError(u8"模拟错误 #%d", tick_count);
         ++tick_count;
     }
 
-    // Push events at irregular intervals
-    if (event_acc >= 3.f) {
-        event_acc = 0.f;
+    if (EveryNSeconds(3.0f, dt, event_acc)) {
         static int ecnt = 0;
-        if (ecnt % 2 == 0) PushEvent("Combat", u8"Boss 刷新");
-        else                PushEvent("AI", u8"路径重新规划");
+        if (ecnt % 2 == 0) PushEventFmt("Combat", u8"Boss 刷新 #%d", ecnt);
+        else                PushEventFmt("AI",     u8"路径重新规划 #%d", ecnt);
         ecnt++;
         if (ecnt % 7 == 0) PushEvent("System", u8"区块加载完成");
     }
 
     Watch(u8"默认/实体数", static_cast<int>(world.entities.size()));
     if (!world.entities.empty()) {
-        Watch("player/x",  world.entities[0].fx);
-        Watch("player/y",  world.entities[0].fy);
-        Watch("player/vx", world.entities[0].vx);
-        Watch("player/vy", world.entities[0].vy);
+        const Entity& p = world.entities[0];
+        Watch("player/pos", p.fx, p.fy);
+        Watch("player/vel", p.vx, p.vy);
     }
     static float mem_acc = 0.f;
-    mem_acc += dt;
-    if (mem_acc >= 0.5f) {
-        mem_acc = 0.f;
+    if (EveryNSeconds(0.5f, dt, mem_acc))
         Watch("mem/heap_kb", static_cast<float>(world.entities.size() * 128 + 4096));
-    }
     Watch("ai/state", (tick_count % 7 < 3) ? "patrol" : "chase");
 }
 

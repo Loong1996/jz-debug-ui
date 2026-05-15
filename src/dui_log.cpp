@@ -116,6 +116,10 @@ void Watch(const char* name, float v) {
 void Watch(const char* name, bool v) {
     Watch(name, v ? "true" : "false");
 }
+void Watch(const char* name, float x, float y) {
+    char buf[64]; std::snprintf(buf, sizeof(buf), "(%.2f, %.2f)", x, y);
+    Watch(name, static_cast<const char*>(buf));
+}
 void Watch(const char* name, const char* v) {
     for (auto& w : s_watch) {
         if (std::strcmp(w.name, name) == 0) {

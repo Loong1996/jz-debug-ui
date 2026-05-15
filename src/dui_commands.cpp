@@ -1,6 +1,7 @@
 #include "dui_commands.h"
 #include "dui_hotkeys.h"
 #include <imgui.h>
+#include <initializer_list>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -136,6 +137,13 @@ void RegisterCommandWithArgs(const char* name,
         cwa.state.push_back(std::move(st));
     }
     g_cmds_args.push_back(std::move(cwa));
+}
+
+void RegisterCommandWithArgs(const char* name,
+                             std::initializer_list<CommandArg> args,
+                             CommandFnArgs fn) {
+    std::vector<CommandArg> v(args);
+    RegisterCommandWithArgs(name, v.data(), static_cast<int>(v.size()), std::move(fn));
 }
 
 void DrawCommands() {

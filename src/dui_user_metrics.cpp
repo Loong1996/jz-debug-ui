@@ -4,44 +4,46 @@
 #include <implot.h>
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 namespace dui {
 namespace {
 
 struct UserMetric {
+    std::string            name;
     RingBuffer<float, 300> buf;
     MetricOpts             opts;
 };
 
-static std::vector<std::string>               s_order;
-static std::unordered_map<std::string, UserMetric> s_metrics;
+static std::vector<UserMetric> s_metrics;
+
+static int find_or_add(const char* name) {
+    for (int i = 0; i < static_cast<int>(s_metrics.size()); i++)
+        if (s_metrics[i].name == name) return i;
+    s_metrics.push_back({ std::string(name), {}, {} });
+    return static_cast<int>(s_metrics.size()) - 1;
+}
 
 struct PlotGroup {
-    std::vector<std::string> names;
+    std::vector<int> indices;
     bool        is_shared;
     const char* unit;
 };
 
 static std::vector<PlotGroup> build_groups() {
     std::vector<PlotGroup> groups;
-    for (const auto& name : s_order) {
-        auto it = s_metrics.find(name);
-        if (it == s_metrics.end()) continue;
-        const MetricOpts& opts = it->second.opts;
-
+    for (int i = 0; i < static_cast<int>(s_metrics.size()); i++) {
+        const MetricOpts& opts = s_metrics[i].opts;
         bool merge = opts.share_axis
             && !groups.empty()
             && groups.back().is_shared
             && ((!groups.back().unit && !opts.unit)
                 || (groups.back().unit && opts.unit
                     && std::string(groups.back().unit) == std::string(opts.unit)));
-
         if (merge) {
-            groups.back().names.push_back(name);
+            groups.back().indices.push_back(i);
         } else {
             PlotGroup g;
-            g.names.push_back(name);
+            g.indices.push_back(i);
             g.is_shared = opts.share_axis;
             g.unit      = opts.unit;
             groups.push_back(std::move(g));
@@ -50,27 +52,23 @@ static std::vector<PlotGroup> build_groups() {
     return groups;
 }
 
-
 } // anonymous namespace
+
+void Metric::Push(float value) const {
+    if (idx < 0 || idx >= static_cast<int>(s_metrics.size())) return;
+    s_metrics[idx].buf.push(value);
+}
+
+Metric ConfigureMetric(const char* name, const MetricOpts& opts) {
+    if (!name || !name[0]) return {};
+    int i = find_or_add(name);
+    s_metrics[i].opts = opts;
+    return { i };
+}
 
 void PushMetric(const char* name, float value) {
     if (!name || !name[0]) return;
-    auto it = s_metrics.find(name);
-    if (it == s_metrics.end()) {
-        s_order.push_back(name);
-        it = s_metrics.emplace(name, UserMetric{}).first;
-    }
-    it->second.buf.push(value);
-}
-
-void ConfigureMetric(const char* name, const MetricOpts& opts) {
-    if (!name || !name[0]) return;
-    auto it = s_metrics.find(name);
-    if (it == s_metrics.end()) {
-        s_order.push_back(name);
-        it = s_metrics.emplace(name, UserMetric{}).first;
-    }
-    it->second.opts = opts;
+    s_metrics[find_or_add(name)].buf.push(value);
 }
 
 void DrawUserMetrics() {
@@ -79,32 +77,23 @@ void DrawUserMetrics() {
 
     auto groups = build_groups();
     for (const auto& grp : groups) {
-        if (grp.names.empty()) continue;
+        if (grp.indices.empty()) continue;
 
-        // Build plot title
         std::string title;
-        for (size_t i = 0; i < grp.names.size(); i++) {
+        for (size_t i = 0; i < grp.indices.size(); i++) {
             if (i) title += " / ";
-            title += grp.names[i];
+            title += s_metrics[grp.indices[i]].name;
         }
 
-        // y axis label from unit of first metric in group
-        const char* y_label = nullptr;
-        auto it0 = s_metrics.find(grp.names[0]);
-        if (it0 != s_metrics.end() && it0->second.opts.unit)
-            y_label = it0->second.opts.unit;
+        const char* y_label = s_metrics[grp.indices[0]].opts.unit;
 
         if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, 130))) {
             ImPlot::SetupAxes(u8"帧", y_label ? y_label : "");
 
-            // Apply y-axis limits: use union of all fixed ranges in the group,
-            // or auto-fit if any member requests it.
             float ymin = 1e30f, ymax = -1e30f;
             bool any_fixed = false;
-            for (const auto& n : grp.names) {
-                auto it = s_metrics.find(n);
-                if (it == s_metrics.end()) continue;
-                const MetricOpts& o = it->second.opts;
+            for (int idx : grp.indices) {
+                const MetricOpts& o = s_metrics[idx].opts;
                 if (o.y_min != o.y_max) {
                     ymin = fminf(ymin, o.y_min);
                     ymax = fmaxf(ymax, o.y_max);
@@ -114,14 +103,12 @@ void DrawUserMetrics() {
             if (any_fixed)
                 ImPlot::SetupAxisLimits(ImAxis_Y1, ymin, ymax, ImPlotCond_Always);
 
-            for (size_t i = 0; i < grp.names.size(); i++) {
-                auto it = s_metrics.find(grp.names[i]);
-                if (it == s_metrics.end()) continue;
-                const UserMetric& um = it->second;
+            for (int idx : grp.indices) {
+                const UserMetric& um = s_metrics[idx];
                 ImPlotSpec spec(ImPlotProp_Offset, um.buf.plot_offset());
                 if (um.opts.color)
                     spec.SetProp(ImPlotProp_LineColor, um.opts.color);
-                ImPlot::PlotLine(grp.names[i].c_str(),
+                ImPlot::PlotLine(um.name.c_str(),
                     um.buf.data(),
                     um.buf.plot_count(),
                     1.0, 0.0,

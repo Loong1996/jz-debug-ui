@@ -2,7 +2,9 @@
 #include "dui_world.h"
 #include <functional>
 #include <cstdint>
+#include <initializer_list>
 #include <string>
+#include <utility>
 
 struct ImDrawList;
 struct ImVec2;
@@ -23,6 +25,12 @@ void RegisterCellDrawer  (uint8_t type, CellDrawer   drawer);
 // Affects: type column, filter combo, group headers, detail pane, and search.
 void RegisterEntityTypeName(uint8_t type, const char* name);
 void RegisterCellTypeName  (uint8_t type, const char* name);
+
+// Bulk registration overloads — equivalent to calling the single-item versions in order.
+// Usage: RegisterEntityTypeNames({{0, u8"主角"}, {1, u8"战士"}, {2, u8"法师"}});
+void RegisterEntityTypeNames(std::initializer_list<std::pair<uint8_t,  const char*>> entries);
+void RegisterCellTypeNames  (std::initializer_list<std::pair<uint8_t,  const char*>> entries);
+void RegisterMapNames       (std::initializer_list<std::pair<uint32_t, const char*>> entries);
 
 // Returns the registered name, or nullptr if none was registered.
 const char* GetEntityTypeName(uint8_t type);

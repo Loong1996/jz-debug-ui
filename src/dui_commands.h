@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,17 @@ struct CommandArg {
     int                enum_count  = 0;
     float              min_v       = 0.f;       // min_v == max_v → no range clamp shown
     float              max_v       = 0.f;
+
+    static CommandArg Bool  (const char* n, bool def = false)
+        { CommandArg a{}; a.name = n; a.type = ArgType::Bool;   a.default_v.b = def; return a; }
+    static CommandArg Int   (const char* n, int def = 0, float mn = 0.f, float mx = 0.f)
+        { CommandArg a{}; a.name = n; a.type = ArgType::Int;    a.default_v.i = def; a.min_v = mn; a.max_v = mx; return a; }
+    static CommandArg Float (const char* n, float def = 0.f, float mn = 0.f, float mx = 0.f)
+        { CommandArg a{}; a.name = n; a.type = ArgType::Float;  a.default_v.f = def; a.min_v = mn; a.max_v = mx; return a; }
+    static CommandArg String(const char* n, const char* def = "")
+        { CommandArg a{}; a.name = n; a.type = ArgType::String; a.default_str = def; return a; }
+    static CommandArg Enum  (const char* n, int def, const char* const* items, int count)
+        { CommandArg a{}; a.name = n; a.type = ArgType::Enum;   a.default_v.i = def; a.enum_items = items; a.enum_count = count; return a; }
 };
 
 struct CommandArgValue {
@@ -43,6 +55,11 @@ using CommandFnArgs = std::function<void(const CommandArgValue* values, int coun
 // args and their string pointers must remain valid for the lifetime of the registration.
 void RegisterCommandWithArgs(const char* name,
                              const CommandArg* args, int arg_count,
+                             CommandFnArgs fn);
+
+// Initializer_list overload: args are copied internally — no lifetime concerns for the list.
+void RegisterCommandWithArgs(const char* name,
+                             std::initializer_list<CommandArg> args,
                              CommandFnArgs fn);
 
 void DrawCommands();  // ImGui panel
