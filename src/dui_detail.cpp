@@ -1,30 +1,30 @@
 #include "dui_detail.h"
 #include <imgui.h>
 #include <unordered_map>
-#include <variant>
 
 namespace {
-    using Fn = std::variant<dui::EntityDetailTextFn, dui::EntityDetailBuilderFn>;
-    std::unordered_map<uint8_t, Fn> g_fns;
+    std::unordered_map<uint8_t, dui::EntityDetailTextFn>    g_text_fns;
+    std::unordered_map<uint8_t, dui::EntityDetailBuilderFn> g_builder_fns;
 }
 
 namespace dui {
 
 void RegisterEntityDetailText(uint8_t type, EntityDetailTextFn fn) {
-    g_fns[type] = std::move(fn);
+    g_builder_fns.erase(type);
+    g_text_fns[type] = std::move(fn);
 }
 void RegisterEntityDetailText(uint8_t type, EntityDetailBuilderFn fn) {
-    g_fns[type] = std::move(fn);
+    g_text_fns.erase(type);
+    g_builder_fns[type] = std::move(fn);
 }
 
 std::string InvokeEntityDetailText(const Entity& e) {
-    auto it = g_fns.find(e.type);
-    if (it == g_fns.end()) return {};
-    if (auto* f = std::get_if<EntityDetailTextFn>(&it->second))
-        return (*f)(e);
-    if (auto* f = std::get_if<EntityDetailBuilderFn>(&it->second)) {
+    auto it = g_text_fns.find(e.type);
+    if (it != g_text_fns.end()) return it->second(e);
+    auto ib = g_builder_fns.find(e.type);
+    if (ib != g_builder_fns.end()) {
         DetailBuilder db;
-        (*f)(e, db);
+        ib->second(e, db);
         return db.Take();
     }
     return {};
