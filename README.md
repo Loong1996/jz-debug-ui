@@ -457,6 +457,23 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
+**指定 Visual Studio 版本**
+
+默认使用系统最新的 VS。如需指定版本，用 `-G` 传入生成器名称：
+
+```bat
+cmake -G "Visual Studio 15 2017" -A x64 -B build
+cmake --build build --config Release
+```
+
+| VS 版本 | 生成器名称 |
+|---------|-----------|
+| VS 2017 | `Visual Studio 15 2017` |
+| VS 2019 | `Visual Studio 16 2019` |
+| VS 2022 | `Visual Studio 17 2022` |
+
+`-A x64` 指定 64 位目标平台，建议始终带上。如需进一步锁定 MSVC 工具集版本，追加 `-T v141`（VS2017 工具集）。
+
 产物：
 - `build/Release/dui.lib` — 核心库
 - `build/Release/dui_demo.exe` — 演示程序
