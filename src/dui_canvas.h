@@ -10,6 +10,9 @@ struct CanvasView {
     bool show_labels   = true;
     bool show_axis     = true;
     bool follow_player = true;
+    bool show_trails   = false;
+    bool show_links    = true;
+    bool show_heatmaps = true;
     float cam_x = 0.f;
     float cam_y = 0.f;
     float zoom  = 1.f;  // [kZoomMin, kZoomMax]

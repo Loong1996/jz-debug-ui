@@ -1,5 +1,7 @@
 #include "dui_ext.h"
 #include <imgui.h>
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -20,9 +22,72 @@ namespace {
     struct GlobalOverlay { std::string name; dui::GlobalOverlayFn fn; };
     std::vector<GlobalOverlay> g_global_overlays;
 
+    // Cell overlay registry
+    std::unordered_map<uint8_t, dui::CellOverlayFn> g_cell_overlays;
+
+    // Heatmap registry
+    struct HeatmapEntry { std::string name; dui::CellValueFn fn; dui::HeatmapOpts opts; };
+    std::vector<HeatmapEntry> g_heatmaps;
+
+    // Entity links registry
+    struct EntityLinksEntry { std::string name; dui::EntityLinksFn fn; };
+    std::vector<EntityLinksEntry> g_entity_links;
+
     // Thread-local canvas view state (set each frame by DrawCanvas)
     struct CanvasViewState { float fcx, fcy, th; ImVec2 center; };
     thread_local CanvasViewState s_cv_view = {};
+
+    // Internal helper: draw a solid or dashed line from→to on dl.
+    static void DrawLine_(ImDrawList* dl, ImVec2 from, ImVec2 to,
+                          uint32_t color, float thickness, bool dashed) {
+        if (!dashed) {
+            dl->AddLine(from, to, color, thickness);
+            return;
+        }
+        float dx = to.x - from.x, dy = to.y - from.y;
+        float len = sqrtf(dx * dx + dy * dy);
+        if (len < 1.f) return;
+        float nx = dx / len, ny = dy / len;
+        const float dash = 6.f, gap = 4.f, step = dash + gap;
+        float t = 0.f;
+        while (t < len) {
+            float t1 = t + dash < len ? t + dash : len;
+            dl->AddLine(
+                ImVec2(from.x + nx * t,  from.y + ny * t),
+                ImVec2(from.x + nx * t1, from.y + ny * t1),
+                color, thickness);
+            t += step;
+        }
+    }
+
+    // Internal helper: draw an arrow (solid or dashed) from→to on dl.
+    static void DrawArrow_(ImDrawList* dl, ImVec2 from, ImVec2 to,
+                           uint32_t color, float thickness, bool dashed) {
+        DrawLine_(dl, from, to, color, thickness, dashed);
+        float dx = to.x - from.x, dy = to.y - from.y;
+        float len = sqrtf(dx * dx + dy * dy);
+        if (len > 8.f) {
+            float nx = dx / len, ny = dy / len;
+            float px = -ny * 4.f, py = nx * 4.f;
+            dl->AddTriangleFilled(
+                to,
+                ImVec2(to.x - nx * 9.f + px, to.y - ny * 9.f + py),
+                ImVec2(to.x - nx * 9.f - px, to.y - ny * 9.f - py),
+                color);
+        }
+    }
+
+    // Lerp a single byte channel
+    static uint8_t LerpU8(uint8_t a, uint8_t b, float t) {
+        return static_cast<uint8_t>(a + (b - a) * t);
+    }
+    static uint32_t LerpColor(uint32_t lo, uint32_t hi, float t) {
+        return IM_COL32(
+            LerpU8(lo & 0xFF,        hi & 0xFF,        t),
+            LerpU8((lo >> 8)  & 0xFF, (hi >> 8)  & 0xFF, t),
+            LerpU8((lo >> 16) & 0xFF, (hi >> 16) & 0xFF, t),
+            LerpU8((lo >> 24) & 0xFF, (hi >> 24) & 0xFF, t));
+    }
 }
 
 namespace dui {
@@ -146,6 +211,8 @@ ImVec2 CanvasToScreen_(float wx, float wy) {
                   s_cv_view.center.y + (dx + dy) * s_cv_view.th);
 }
 
+float CanvasTileHalf_() { return s_cv_view.th; }
+
 void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl) {
     auto it = g_entity_overlays.find(e.type);
     if (it == g_entity_overlays.end()) return;
@@ -157,6 +224,117 @@ void InvokeGlobalOverlays_(const World& world, ImDrawList* dl) {
     CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
     for (const auto& g : g_global_overlays)
         if (g.fn) g.fn(world, ctx);
+}
+
+// ---- Cell overlay ----
+
+void RegisterCellOverlay(uint8_t type, CellOverlayFn fn) {
+    g_cell_overlays[type] = std::move(fn);
+}
+
+void InvokeCellOverlays_(const World& world, const Cell& c, ImDrawList* dl) {
+    auto it = g_cell_overlays.find(c.type);
+    if (it == g_cell_overlays.end()) return;
+    CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
+    it->second(c, ctx);
+}
+
+// ---- Heatmap ----
+
+void RegisterCellHeatmap(const char* name, CellValueFn fn, HeatmapOpts opts) {
+    if (!name) return;
+    for (auto& h : g_heatmaps) {
+        if (h.name == name) { h.fn = std::move(fn); h.opts = opts; return; }
+    }
+    g_heatmaps.push_back({ std::string(name), std::move(fn), opts });
+}
+
+void UnregisterCellHeatmap(const char* name) {
+    if (!name) return;
+    for (auto it = g_heatmaps.begin(); it != g_heatmaps.end(); ++it) {
+        if (it->name == name) { g_heatmaps.erase(it); return; }
+    }
+}
+
+void InvokeCellHeatmaps_(const World& world, ImDrawList* dl,
+                         int ccx, int ccy, int view_half) {
+    if (g_heatmaps.empty()) return;
+    float th = CanvasTileHalf_();
+
+    for (const auto& h : g_heatmaps) {
+        if (!h.fn) continue;
+        float lo = h.opts.min_value, hi = h.opts.max_value;
+        if (h.opts.auto_range) {
+            lo =  1e30f; hi = -1e30f;
+            for (int iy = ccy - view_half; iy <= ccy + view_half; ++iy)
+                for (int ix = ccx - view_half; ix <= ccx + view_half; ++ix) {
+                    float v = h.fn(ix, iy);
+                    if (v < lo) lo = v;
+                    if (v > hi) hi = v;
+                }
+            if (hi <= lo) { lo = h.opts.min_value; hi = h.opts.max_value; }
+        }
+        float range = hi - lo;
+        if (range < 1e-6f) range = 1e-6f;
+
+        for (int iy = ccy - view_half; iy <= ccy + view_half; ++iy) {
+            for (int ix = ccx - view_half; ix <= ccx + view_half; ++ix) {
+                float t = (h.fn(ix, iy) - lo) / range;
+                if (t < 0.f) t = 0.f; if (t > 1.f) t = 1.f;
+                uint32_t col = LerpColor(h.opts.low_color, h.opts.high_color, t);
+                ImVec2 cen = CanvasToScreen_(static_cast<float>(ix), static_cast<float>(iy));
+                dl->AddQuadFilled(
+                    ImVec2(cen.x,      cen.y - th),
+                    ImVec2(cen.x + th, cen.y),
+                    ImVec2(cen.x,      cen.y + th),
+                    ImVec2(cen.x - th, cen.y),
+                    col);
+            }
+        }
+    }
+}
+
+// ---- Entity links ----
+
+void RegisterEntityLinks(const char* name, EntityLinksFn fn) {
+    if (!name) return;
+    for (auto& l : g_entity_links) {
+        if (l.name == name) { l.fn = std::move(fn); return; }
+    }
+    g_entity_links.push_back({ std::string(name), std::move(fn) });
+}
+
+void UnregisterEntityLinks(const char* name) {
+    if (!name) return;
+    for (auto it = g_entity_links.begin(); it != g_entity_links.end(); ++it) {
+        if (it->name == name) { g_entity_links.erase(it); return; }
+    }
+}
+
+void InvokeEntityLinks_(const World& world, ImDrawList* dl) {
+    if (g_entity_links.empty()) return;
+
+    // Build id→entity index for the active map
+    std::unordered_map<uint64_t, const Entity*> idx;
+    idx.reserve(world.entities.size());
+    for (const auto& e : world.entities)
+        if (e.map_id == world.active_map_id) idx[e.id] = &e;
+
+    for (const auto& e : world.entities) {
+        if (e.map_id != world.active_map_id) continue;
+        for (const auto& entry : g_entity_links) {
+            if (!entry.fn) continue;
+            std::vector<EntityLink> links = entry.fn(e);
+            for (const auto& lk : links) {
+                auto tit = idx.find(lk.target_id);
+                if (tit == idx.end()) continue;
+                ImVec2 from = CanvasToScreen_(e.fx, e.fy);
+                ImVec2 to   = CanvasToScreen_(tit->second->fx, tit->second->fy);
+                if (lk.arrow) DrawArrow_(dl, from, to, lk.color, lk.thickness, lk.dashed);
+                else          DrawLine_ (dl, from, to, lk.color, lk.thickness, lk.dashed);
+            }
+        }
+    }
 }
 
 } // namespace dui

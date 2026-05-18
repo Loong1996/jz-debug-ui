@@ -5,6 +5,7 @@
 #include "dui_metrics.h"
 #include "dui_draw_all.h"
 #include "dui_demo_setup.h"
+#include "dui_trails.h"
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::App app;
@@ -16,8 +17,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
     int tick_count = 0;
     while (app.Tick([&](float dt) {
-        dui::DrawAll(world, metrics);
         dui::demo::PerFrameDemo(world, metrics, dt, tick_count);
+        dui::DrawAll(world, metrics);
     })) {}
     return 0;
 }

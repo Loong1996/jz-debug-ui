@@ -7,8 +7,10 @@
 #include "dui_events.h"
 #include "dui_hotkeys.h"
 #include "dui_mock.h"
+#include "dui_trails.h"
 #include <imgui.h>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -126,12 +128,50 @@ void SetupRegistrations(World& world) {
     // Metric configuration — store handles for zero-lookup Push
     s_m_ai_ms    = ConfigureMetric("ai/decision_ms", { "ms" });
     s_m_ai_nodes = ConfigureMetric("ai/path_nodes",  { "nodes", 0.f, 30.f });
+
+    // ---- Cell overlay demo: draw X icon on water (type 2) and trap (type 3) cells ----
+    auto draw_x_icon = [](const Cell& c, const CanvasOverlayCtx& ctx) {
+        ImVec2 center = ctx.ToScreen(static_cast<float>(c.x), static_cast<float>(c.y));
+        float  r      = 5.f;
+        uint32_t col  = (c.type == 3) ? IM_COL32(255, 60, 60, 220) : IM_COL32(80, 180, 255, 200);
+        ctx.dl->AddLine(ImVec2(center.x - r, center.y - r), ImVec2(center.x + r, center.y + r), col, 1.5f);
+        ctx.dl->AddLine(ImVec2(center.x + r, center.y - r), ImVec2(center.x - r, center.y + r), col, 1.5f);
+    };
+    RegisterCellOverlay(2, draw_x_icon);
+    RegisterCellOverlay(3, draw_x_icon);
+
+    // ---- Heatmap demo: tile visit frequency — redder = more often walked over ----
+    RegisterCellHeatmap(u8"经过频率", [](int x, int y) -> float {
+        return GetTileVisitHeat(x, y);
+    }, { 0.f, 1.f, RGBA(0, 60, 180, 0), RGBA(255, 60, 0, 220), true });
+
+    // ---- Entity links demo: each type-1 warrior points to its nearest same-type peer ----
+    RegisterEntityLinks(u8"最近战士", [wp](const Entity& src) -> std::vector<EntityLink> {
+        if (src.type != 1) return {};
+        float best_dist2 = 1e30f;
+        uint64_t best_id = 0;
+        for (const auto& e : wp->entities) {
+            if (e.id == src.id || e.type != 1 || e.map_id != src.map_id) continue;
+            float dx = e.fx - src.fx, dy = e.fy - src.fy;
+            float d2 = dx * dx + dy * dy;
+            if (d2 < best_dist2) { best_dist2 = d2; best_id = e.id; }
+        }
+        if (best_id == 0) return {};
+        return { { best_id, RGBA(255, 140, 0, 200), 1.5f, true, true } };
+    });
+
+    // ---- Trails demo: enable trails with 80-sample history ----
+    EnableEntityTrails(true);
+    SetTrailLength(80);
+    SetTileVisitDecay(0.99f);
 }
 
 void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
     using Clock = std::chrono::steady_clock;
     auto t0 = Clock::now();
     TickMockWorld(world, dt);
+    RecordTrailSnapshot(world);
+    AccumulateTileVisits(world);
     metrics.tick_ms.push(
         std::chrono::duration<float>(Clock::now() - t0).count() * 1000.f);
     metrics.entity_count.push(static_cast<float>(world.entities.size()));

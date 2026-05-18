@@ -87,10 +87,58 @@ void RegisterEntityOverlay(uint8_t type, EntityOverlayFn fn);
 void RegisterGlobalOverlay  (const char* name, GlobalOverlayFn fn);
 void UnregisterGlobalOverlay(const char* name);
 
+// ---- Cell Overlay API ----
+// Mirrors RegisterEntityOverlay: per cell-type callback drawn after cells are filled.
+
+using CellOverlayFn = std::function<void(const Cell&, const CanvasOverlayCtx&)>;
+
+void RegisterCellOverlay(uint8_t type, CellOverlayFn fn);
+
+// ---- Cell Heatmap API ----
+// Overlays a color gradient on every tile in the visible viewport,
+// including tiles where no Cell object exists.
+// fn receives tile world-coordinates (x, y); return a float scalar.
+
+struct HeatmapOpts {
+    float    min_value  = 0.f;
+    float    max_value  = 1.f;
+    uint32_t low_color  = RGBA(  0,  80, 200, 100);
+    uint32_t high_color = RGBA(220,  40,  40, 180);
+    bool     auto_range = false; // normalize against visible viewport min/max each frame
+};
+
+using CellValueFn = std::function<float(int x, int y)>;
+
+void RegisterCellHeatmap  (const char* name, CellValueFn fn, HeatmapOpts opts = {});
+void UnregisterCellHeatmap(const char* name);
+
+// ---- Entity Links API ----
+// Draw directed lines between entities (e.g. target, threat, leader→follower).
+// Multiple named link registrations can coexist.
+
+struct EntityLink {
+    uint64_t target_id;
+    uint32_t color     = RGBA(255, 200, 0, 180);
+    float    thickness = 1.5f;
+    bool     arrow     = true;
+    bool     dashed    = false; // draw as dashed line instead of solid
+};
+
+using EntityLinksFn = std::function<std::vector<EntityLink>(const Entity&)>;
+
+void RegisterEntityLinks  (const char* name, EntityLinksFn fn);
+void UnregisterEntityLinks(const char* name);
+
 // Internal — called by DrawCanvas.
-void SetCanvasViewState_(float fcx, float fcy, float th, ImVec2 center);
+void  SetCanvasViewState_(float fcx, float fcy, float th, ImVec2 center);
 ImVec2 CanvasToScreen_(float wx, float wy);
+float  CanvasTileHalf_();  // current tile half-width in screen pixels
 void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl);
 void InvokeGlobalOverlays_(const World& world, ImDrawList* dl);
+void InvokeCellOverlays_  (const World& world, const Cell& c, ImDrawList* dl);
+// ccx/ccy: camera center tile coords; view_half: tiles visible in each direction
+void InvokeCellHeatmaps_  (const World& world, ImDrawList* dl,
+                            int ccx, int ccy, int view_half);
+void InvokeEntityLinks_   (const World& world, ImDrawList* dl);
 
 } // namespace dui

@@ -1,5 +1,6 @@
 #include "dui_canvas.h"
 #include "dui_ext.h"
+#include "dui_trails.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
@@ -82,7 +83,10 @@ void DrawCanvas(World& world, CanvasView* view) {
     ImGui::Checkbox(u8"格子",   &view->show_cells);  ImGui::SameLine();
     ImGui::Checkbox(u8"实体",   &view->show_ents);   ImGui::SameLine();
     ImGui::Checkbox(u8"标签",   &view->show_labels); ImGui::SameLine();
-    ImGui::Checkbox(u8"坐标轴", &view->show_axis);
+    ImGui::Checkbox(u8"坐标轴", &view->show_axis);   ImGui::SameLine();
+    ImGui::Checkbox(u8"轨迹",   &view->show_trails); ImGui::SameLine();
+    ImGui::Checkbox(u8"连线",   &view->show_links);  ImGui::SameLine();
+    ImGui::Checkbox(u8"热力图", &view->show_heatmaps);
 
     // === Toolbar row 2: camera controls ===
     if (ImGui::RadioButton(u8"跟随",  view->follow_player))  view->follow_player = true;
@@ -275,7 +279,20 @@ void DrawCanvas(World& world, CanvasView* view) {
             TileDiamond(static_cast<float>(c.x), static_cast<float>(c.y), pts);
             dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(255, 255, 255, 160), 2.f);
         }
+
+        // --- 1b. Per-type cell overlays ---
+        for (const auto& c : world.cells) {
+            if (c.map_id != world.active_map_id) continue;
+            InvokeCellOverlays_(world, c, dl);
+        }
     }
+
+    // --- 1c. Heatmaps — covers entire viewport, independent of show_cells ---
+    if (view->show_heatmaps)
+        InvokeCellHeatmaps_(world, dl, ccx, ccy, static_cast<int>(kViewHalf));
+
+    // --- 1d. Entity trails (below entity sprites) ---
+    if (view->show_trails && IsEntityTrailsEnabled()) InvokeTrails_(world, dl);
 
     // --- 2. Grid lines ---
     if (view->show_grid) {
@@ -393,6 +410,9 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
     }
     InvokeGlobalOverlays_(world, dl);
+
+    // --- 5c. Entity links ---
+    if (view->show_links) InvokeEntityLinks_(world, dl);
 
     // --- 6. Axis indicator ---
     dl->PopClipRect();
