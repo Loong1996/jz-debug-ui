@@ -74,14 +74,15 @@ struct Cell {
 };
 
 struct World {
-    std::vector<Entity> entities;
-    std::vector<Cell>   cells;
+    std::vector<Entity>   entities;
+    std::vector<Cell>     cells;
     uint32_t active_map_id = 0;
-    int  selected_id    = -1;
+    int  selected_id    = -1;   // primary selection; -1 when nothing selected
     int  player_id      = -1;
     bool sel_cell_valid = false;
     int  sel_cell_x     = 0;
     int  sel_cell_y     = 0;
+    std::vector<uint64_t> selected_ids; // multi-selection set; always includes selected_id's entity
 
     // Returns a reference to the new entity. Do not store the reference
     // across further SpawnEntity calls (vector reallocation may invalidate it).

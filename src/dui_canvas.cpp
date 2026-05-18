@@ -352,9 +352,14 @@ void DrawCanvas(World& world, CanvasView* view) {
                                    cpt.y + (pts[k].y - cpt.y) * r);
             dl->AddQuadFilled(scaled[0], scaled[1], scaled[2], scaled[3], e.color);
 
-            // Selected outline (yellow)
-            if (static_cast<int>(e.id) == world.selected_id)
-                dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(255, 230, 0, 255), 2.f);
+            // Selected outline: bright yellow for primary, dimmer for multi-select
+            if (IsSelected(world, e.id)) {
+                bool primary = static_cast<int>(e.id) == world.selected_id;
+                dl->AddQuad(pts[0], pts[1], pts[2], pts[3],
+                            primary ? IM_COL32(255, 230, 0, 255)
+                                    : IM_COL32(255, 185, 0, 140),
+                            primary ? 2.f : 1.f);
+            }
 
             // Hover ring (white)
             for (int hi : hover_entity_idx) {
@@ -479,8 +484,9 @@ void DrawCanvas(World& world, CanvasView* view) {
             s_lmb_pan = true;
         } else if (nhits == 1 && nskipped == 0) {
             if (hits[0].kind == 0) {
-                const auto& e       = world.entities[hits[0].index];
-                world.selected_id   = static_cast<int>(e.id);
+                const auto& e = world.entities[hits[0].index];
+                SelectClear(world);
+                SelectAdd(world, e.id);
                 view->cam_x         = e.fx;
                 view->cam_y         = e.fy;
                 view->follow_player = true;
@@ -538,8 +544,9 @@ void DrawCanvas(World& world, CanvasView* view) {
             ImGui::PushID(i);
             if (ImGui::Selectable(buf)) {
                 if (h.kind == 0) {
-                    const auto& e       = world.entities[h.index];
-                    world.selected_id   = static_cast<int>(e.id);
+                    const auto& e = world.entities[h.index];
+                    SelectClear(world);
+                    SelectAdd(world, e.id);
                     view->cam_x         = e.fx;
                     view->cam_y         = e.fy;
                     view->follow_player = true;

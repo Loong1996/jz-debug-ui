@@ -29,7 +29,7 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
 
     for (int i : idxs) {
         auto& e = world.entities[i];
-        bool selected = static_cast<int>(e.id) == world.selected_id;
+        bool selected = IsSelected(world, e.id);
 
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
@@ -44,8 +44,14 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
         ImGui::PushID(static_cast<int>(e.id));
         if (ImGui::Selectable("##row", selected,
                 ImGuiSelectableFlags_SpanAllColumns,
-                ImVec2(0.f, ImGui::GetTextLineHeight())))
-            world.selected_id = selected ? -1 : static_cast<int>(e.id);
+                ImVec2(0.f, ImGui::GetTextLineHeight()))) {
+            if (ImGui::GetIO().KeyCtrl) {
+                SelectToggle(world, e.id);
+            } else {
+                SelectClear(world);
+                if (!selected) SelectAdd(world, e.id);
+            }
+        }
         ImGui::SameLine(0.f, 0.f);
         { const char* tn = GetEntityTypeName(e.type); char fb[16];
           if (!tn) { std::snprintf(fb, sizeof(fb), "%u", static_cast<unsigned>(e.type)); tn = fb; }

@@ -1,5 +1,6 @@
 #include "dui_ext.h"
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -32,6 +33,10 @@ namespace {
     // Entity links registry
     struct EntityLinksEntry { std::string name; dui::EntityLinksFn fn; };
     std::vector<EntityLinksEntry> g_entity_links;
+
+    // User panel registry
+    struct PanelEntry { std::string title; dui::PanelDrawFn fn; dui::PanelDock dock; };
+    std::vector<PanelEntry> g_panels;
 
     // Thread-local canvas view state (set each frame by DrawCanvas)
     struct CanvasViewState { float fcx, fcy, th; ImVec2 center; };
@@ -136,9 +141,11 @@ void SwitchActiveMap(World& w, uint32_t new_map_id) {
     w.active_map_id  = new_map_id;
     w.sel_cell_valid = false;
     w.selected_id    = -1;
+    w.selected_ids.clear();
     for (const auto& e : w.entities) {
         if (e.map_id == new_map_id) {
             w.selected_id = static_cast<int>(e.id);
+            w.selected_ids.push_back(e.id);
             break;
         }
     }
@@ -335,6 +342,80 @@ void InvokeEntityLinks_(const World& world, ImDrawList* dl) {
             }
         }
     }
+}
+
+// ---- User Panels ----
+
+void RegisterPanel(const char* window_title, PanelDrawFn draw_fn, PanelDock dock) {
+    if (!window_title) return;
+    for (auto& p : g_panels) {
+        if (p.title == window_title) { p.fn = std::move(draw_fn); p.dock = dock; return; }
+    }
+    g_panels.push_back({ std::string(window_title), std::move(draw_fn), dock });
+}
+
+void UnregisterPanel(const char* window_title) {
+    if (!window_title) return;
+    for (auto it = g_panels.begin(); it != g_panels.end(); ++it) {
+        if (it->title == window_title) { g_panels.erase(it); return; }
+    }
+}
+
+void InvokeUserPanels_() {
+    for (const auto& p : g_panels) {
+        if (!p.fn) continue;
+        ImGui::Begin(p.title.c_str());
+        p.fn();
+        ImGui::End();
+    }
+}
+
+void DockUserPanels_(ImGuiID center, ImGuiID left, ImGuiID right, ImGuiID bottom) {
+    for (const auto& p : g_panels) {
+        ImGuiID slot = 0;
+        switch (p.dock) {
+            case PanelDock::Center:   slot = center; break;
+            case PanelDock::Left:     slot = left;   break;
+            case PanelDock::Right:    slot = right;  break;
+            case PanelDock::Bottom:   slot = bottom; break;
+            case PanelDock::Floating: slot = 0;      break;
+        }
+        if (slot) ImGui::DockBuilderDockWindow(p.title.c_str(), slot);
+    }
+}
+
+// ---- Multi-selection ----
+
+bool IsSelected(const World& w, uint64_t id) {
+    for (auto eid : w.selected_ids)
+        if (eid == id) return true;
+    return false;
+}
+
+void SelectAdd(World& w, uint64_t id, bool set_primary) {
+    if (!IsSelected(w, id)) w.selected_ids.push_back(id);
+    if (set_primary) w.selected_id = static_cast<int>(id);
+}
+
+void SelectRemove(World& w, uint64_t id) {
+    for (auto it = w.selected_ids.begin(); it != w.selected_ids.end(); ++it) {
+        if (*it != id) continue;
+        w.selected_ids.erase(it);
+        if (static_cast<int>(id) == w.selected_id)
+            w.selected_id = w.selected_ids.empty() ? -1
+                          : static_cast<int>(w.selected_ids.back());
+        return;
+    }
+}
+
+void SelectToggle(World& w, uint64_t id) {
+    if (IsSelected(w, id)) SelectRemove(w, id);
+    else                   SelectAdd(w, id);
+}
+
+void SelectClear(World& w) {
+    w.selected_ids.clear();
+    w.selected_id = -1;
 }
 
 } // namespace dui

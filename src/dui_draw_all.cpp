@@ -1,4 +1,5 @@
 #include "dui_draw_all.h"
+#include "dui_ext.h"
 #include "dui_inspector.h"
 #include "dui_canvas.h"
 #include "dui_metrics.h"
@@ -19,6 +20,7 @@ void DrawAll(World& world, Metrics& metrics) {
     DrawCommands();
     DrawEntityDetail(world);
     DrawEvents();
+    InvokeUserPanels_();
     DrawGlobalSearch(world);
 }
 

@@ -282,6 +282,15 @@ static void draw_sparkline(const WatchEntry& w) {
 void DrawWatch() {
     ImGui::Begin(u8"监视");
 
+    static char watch_filter[64] = {};
+    ImGui::SetNextItemWidth(-1.f);
+    ImGui::InputTextWithHint("##wf", u8"过滤名称", watch_filter, sizeof(watch_filter));
+    ImGui::Separator();
+
+    auto pass_watch = [&](const WatchEntry& w) {
+        return watch_filter[0] == '\0' || std::strstr(w.name, watch_filter) != nullptr;
+    };
+
     if (ImGui::BeginTable("##watch_tbl", 3,
             ImGuiTableFlags_Borders     |
             ImGuiTableFlags_RowBg       |
@@ -291,12 +300,12 @@ void DrawWatch() {
         ImGui::TableSetupColumn(u8"趋势", ImGuiTableColumnFlags_WidthFixed,   80.f);
         ImGui::TableHeadersRow();
 
-        // Collect groups preserving order
+        // Collect groups preserving insertion order, respecting filter
         std::vector<std::string> groups;
         for (const auto& w : s_watch) {
-            std::string g;
+            if (!pass_watch(w)) continue;
             const char* slash = std::strchr(w.name, '/');
-            g = slash ? std::string(w.name, static_cast<size_t>(slash - w.name)) : u8"默认";
+            std::string g = slash ? std::string(w.name, static_cast<size_t>(slash - w.name)) : u8"默认";
             bool found = false;
             for (const auto& gg : groups) if (gg == g) { found = true; break; }
             if (!found) groups.push_back(g);
@@ -306,55 +315,56 @@ void DrawWatch() {
         std::string remove_group;
 
         for (const auto& grp : groups) {
-            // Group header row
+            // Group header row — collapsible TreeNode
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
-            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(55, 55, 78, 200));
-            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, IM_COL32(55, 55, 78, 200));
 
+            ImGui::PushID(("grp_" + grp).c_str());
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 1.0f, 1.f));
-            ImGui::TextUnformatted(grp.c_str());
+            bool open = ImGui::TreeNodeEx(grp.c_str(),
+                ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAllColumns);
             ImGui::PopStyleColor();
 
             ImGui::TableSetColumnIndex(2);
-            ImGui::PushID(("grp_" + grp).c_str());
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.f));
             if (ImGui::SmallButton(u8"清空"))
                 remove_group = grp;
             ImGui::PopStyleColor();
             ImGui::PopID();
 
-            // Entries
-            for (int idx = 0; idx < static_cast<int>(s_watch.size()); idx++) {
-                WatchEntry& w = s_watch[idx];
-                const char* sl = std::strchr(w.name, '/');
-                std::string wg = sl ? std::string(w.name, static_cast<size_t>(sl - w.name)) : u8"默认";
-                if (wg != grp) continue;
+            // Entries — only rendered when group is expanded
+            if (open) {
+                for (int idx = 0; idx < static_cast<int>(s_watch.size()); idx++) {
+                    WatchEntry& w = s_watch[idx];
+                    if (!pass_watch(w)) continue;
+                    const char* sl = std::strchr(w.name, '/');
+                    std::string wg = sl ? std::string(w.name, static_cast<size_t>(sl - w.name)) : u8"默认";
+                    if (wg != grp) continue;
 
-                const char* display_name = sl ? sl + 1 : w.name;
+                    const char* display_name = sl ? sl + 1 : w.name;
 
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0);
-                ImGui::PushID(idx);
-                bool hovered = false;
-                ImGui::Selectable(display_name, false,
-                    ImGuiSelectableFlags_AllowOverlap, ImVec2(0, 0));
-                hovered = ImGui::IsItemHovered();
-                if (hovered) {
-                    ImGui::SameLine();
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.4f, 0.4f, 1.f));
-                    if (ImGui::SmallButton("x"))
-                        remove_name = w.name;
-                    ImGui::PopStyleColor();
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::PushID(idx);
+                    ImGui::Selectable(display_name, false,
+                        ImGuiSelectableFlags_AllowOverlap, ImVec2(0, 0));
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SameLine();
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.4f, 0.4f, 1.f));
+                        if (ImGui::SmallButton("x"))
+                            remove_name = w.name;
+                        ImGui::PopStyleColor();
+                    }
+                    ImGui::PopID();
+
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TextUnformatted(w.value);
+
+                    ImGui::TableSetColumnIndex(2);
+                    if (w.is_numeric)
+                        draw_sparkline(w);
                 }
-                ImGui::PopID();
-
-                ImGui::TableSetColumnIndex(1);
-                ImGui::TextUnformatted(w.value);
-
-                ImGui::TableSetColumnIndex(2);
-                if (w.is_numeric)
-                    draw_sparkline(w);
+                ImGui::TreePop();
             }
         }
 

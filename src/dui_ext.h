@@ -5,9 +5,8 @@
 #include <initializer_list>
 #include <string>
 #include <utility>
-
-struct ImDrawList;
-struct ImVec2;
+#include <vector>
+#include <imgui.h>
 
 namespace dui {
 
@@ -140,5 +139,37 @@ void InvokeCellOverlays_  (const World& world, const Cell& c, ImDrawList* dl);
 void InvokeCellHeatmaps_  (const World& world, ImDrawList* dl,
                             int ccx, int ccy, int view_half);
 void InvokeEntityLinks_   (const World& world, ImDrawList* dl);
+
+// ---- User Panel API ----
+// RegisterPanel lets users add ImGui windows into the existing dock layout.
+// draw_fn is called every frame inside Begin/End — write only ImGui content.
+// window_title is also used as the DockBuilder key; keep it stable.
+// RegisterPanel must be called before the first App::Tick so the dock layout
+// includes the panel. Panels registered later appear floating and can be dragged.
+
+enum class PanelDock { Center, Left, Right, Bottom, Floating };
+
+using PanelDrawFn = std::function<void()>;
+
+void RegisterPanel  (const char* window_title, PanelDrawFn draw_fn,
+                     PanelDock initial_dock = PanelDock::Bottom);
+void UnregisterPanel(const char* window_title);
+
+void InvokeUserPanels_();                                 // called by DrawAll
+void DockUserPanels_(ImGuiID center, ImGuiID left,
+                     ImGuiID right,  ImGuiID bottom);      // called by ApplyBuiltinLayout
+
+// ---- Multi-selection helpers ----
+// World::selected_ids is the multi-selection set; selected_id is the primary
+// (used by the Inspector detail panel and follow-camera). Use these helpers to
+// keep both fields consistent.
+
+// Add id to selected_ids. If set_primary, also updates selected_id.
+void SelectAdd   (World& w, uint64_t id, bool set_primary = true);
+// Remove id. If it was primary, promotes another id (or -1 if empty).
+void SelectRemove(World& w, uint64_t id);
+void SelectToggle(World& w, uint64_t id);
+void SelectClear (World& w);
+bool IsSelected  (const World& w, uint64_t id);
 
 } // namespace dui

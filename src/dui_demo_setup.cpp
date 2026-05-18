@@ -164,6 +164,33 @@ void SetupRegistrations(World& world) {
     EnableEntityTrails(true);
     SetTrailLength(80);
     SetTileVisitDecay(0.99f);
+
+    // ---- Custom user panel demo ----
+    RegisterPanel(u8"AI 状态", [wp] {
+        if (wp->entities.empty()) { ImGui::TextDisabled("(no entities)"); return; }
+        const auto& p = wp->entities[0];
+        ImGui::Text(u8"玩家位置: (%.1f, %.1f)", p.fx, p.fy);
+        ImGui::Text(u8"实体总数: %d", static_cast<int>(wp->entities.size()));
+        ImGui::Text(u8"多选数量: %d", static_cast<int>(wp->selected_ids.size()));
+        ImGui::Separator();
+        ImGui::TextDisabled(u8"用 RegisterPanel 注册的用户面板示例");
+    }, PanelDock::Right);
+
+    // ---- Multi-selection batch command demos ----
+    RegisterCommand(u8"Selection/清除选择", [wp] { SelectClear(*wp); });
+
+    RegisterCommand(u8"Selection/选中实体染红", [wp] {
+        for (auto id : wp->selected_ids)
+            for (auto& e : wp->entities)
+                if (e.id == id) { e.SetColor(220, 60, 60); break; }
+        Log(u8"colored %d entities", static_cast<int>(wp->selected_ids.size()));
+    });
+
+    RegisterCommand(u8"Selection/选中实体传送到原点", [wp] {
+        for (auto id : wp->selected_ids)
+            for (auto& e : wp->entities)
+                if (e.id == id) { e.SetPos(0.f, 0.f).SetVel(0.f, 0.f); break; }
+    });
 }
 
 void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {

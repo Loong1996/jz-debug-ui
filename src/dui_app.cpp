@@ -1,4 +1,5 @@
 #include "dui_app.h"
+#include "dui_ext.h"
 #include "dui_hotkeys.h"
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -222,6 +223,7 @@ void App::ApplyBuiltinLayout(ImGuiID dsid) {
     ImGui::DockBuilderDockWindow(u8"性能指标", bot);
     ImGui::DockBuilderDockWindow(u8"命令",     bot);
     ImGui::DockBuilderDockWindow(u8"事件",     bot);
+    DockUserPanels_(mid, lft, rgt, bot);
     ImGui::DockBuilderFinish(dsid);
 }
 
