@@ -358,8 +358,10 @@ void DrawInspector(World& world) {
                     const char* ovtn = GetEntityTypeName(e.type);
                     if (ovtn) std::snprintf(buf, sizeof(buf), "[%s] %s", ovtn, e.label);
                     else      std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
-                    if (ImGui::Selectable(buf))
-                        world.selected_id = static_cast<int>(e.id);
+                    if (ImGui::Selectable(buf)) {
+                        SelectClear(world);
+                        SelectAdd(world, e.id);
+                    }
                     ImGui::PopID();
                 }
             }
@@ -405,14 +407,16 @@ void DrawInspector(World& world) {
             for (auto& e : world.entities) {
                 if (e.map_id != world.active_map_id) continue;
                 if (e.x != world.sel_cell_x || e.y != world.sel_cell_y) continue;
-                bool is_sel = static_cast<int>(e.id) == world.selected_id;
+                bool is_sel = IsSelected(world, e.id);
                 ImGui::PushID(static_cast<int>(e.id));
                 char buf[64];
                 const char* etn2 = GetEntityTypeName(e.type);
                 if (etn2) std::snprintf(buf, sizeof(buf), "[%s] %s", etn2, e.label);
                 else      std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
-                if (ImGui::Selectable(buf, is_sel))
-                    world.selected_id = is_sel ? -1 : static_cast<int>(e.id);
+                if (ImGui::Selectable(buf, is_sel)) {
+                    if (is_sel) SelectClear(world);
+                    else { SelectClear(world); SelectAdd(world, e.id); }
+                }
                 ImGui::PopID();
             }
         }

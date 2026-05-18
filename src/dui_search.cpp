@@ -123,7 +123,8 @@ static void activate(World& world) {
         const Entity& e = world.entities[r.entity_idx];
         if (e.map_id != world.active_map_id)
             SwitchActiveMap(world, e.map_id);
-        world.selected_id = static_cast<int>(e.id);
+        SelectClear(world);
+        SelectAdd(world, e.id);
         break;
     }
     case SearchResult::KCmd:

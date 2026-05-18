@@ -30,8 +30,9 @@ World MakeMockWorld() {
          .SetType(static_cast<uint8_t>(i % 3))
          .SetLabel("#%d", 1000 + i);
 
-    w.player_id   = static_cast<int>(w.entities[0].id);
-    w.selected_id = w.player_id;
+    w.player_id     = static_cast<int>(w.entities[0].id);
+    w.selected_id   = w.player_id;
+    w.selected_ids.push_back(w.entities[0].id);
 
     const uint32_t wall_col  = RGBA(90,  70,  70,  200);
     const uint32_t water_col = RGBA(40,  80,  160, 160);
