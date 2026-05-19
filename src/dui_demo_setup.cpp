@@ -155,7 +155,7 @@ void SetupRegistrations(World& world) {
     });
     RegisterCommand(u8"World/清空实体", [wp] {
         wp->entities.clear();
-        wp->selected_id = -1;
+        wp->selected_id = 0;
         LogWarn(u8"all entities cleared");
     });
     RegisterCommand(u8"Player/传送到原点", [wp] {

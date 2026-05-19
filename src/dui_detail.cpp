@@ -91,7 +91,7 @@ bool InvokeCellEditor_(Cell& c) {
 void DrawEntityDetail(World& world) {
     ImGui::Begin(u8"实体详情");
 
-    if (world.selected_id == -1) {
+    if (world.selected_id == 0) {
         ImGui::TextDisabled(u8"(未选中实体)");
         ImGui::End();
         return;
@@ -99,7 +99,7 @@ void DrawEntityDetail(World& world) {
 
     Entity* found = nullptr;
     for (auto& e : world.entities)
-        if (static_cast<int>(e.id) == world.selected_id && e.map_id == world.active_map_id) { found = &e; break; }
+        if (e.id == world.selected_id && e.map_id == world.active_map_id) { found = &e; break; }
 
     if (!found) {
         ImGui::TextDisabled(u8"(未选中实体)");

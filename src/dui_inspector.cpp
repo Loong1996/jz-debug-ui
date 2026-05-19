@@ -234,7 +234,7 @@ void DrawInspector(World& world) {
     // ---- Sort ----
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
-        if (static_cast<int>(e.id) == world.player_id && e.map_id == world.active_map_id) { player = &e; break; }
+        if (e.id == world.player_id && e.map_id == world.active_map_id) { player = &e; break; }
 
     std::sort(show_idx.begin(), show_idx.end(), [&](int ai, int bi) -> bool {
         const auto& a = world.entities[ai];
@@ -324,12 +324,12 @@ void DrawInspector(World& world) {
     }
 
     // ---- Selected entity details ----
-    if (world.selected_id != -1) {
+    if (world.selected_id != 0) {
         ImGui::Separator();
         int sel_x = 0, sel_y = 0;
         bool found = false;
         for (auto& e : world.entities) {
-            if (static_cast<int>(e.id) != world.selected_id) continue;
+            if (e.id != world.selected_id) continue;
             char sec[80];
             const char* etn = GetEntityTypeName(e.type);
             if (etn) std::snprintf(sec, sizeof(sec), u8"基本信息 — %s  [%s]##basic", e.label, etn);
@@ -349,14 +349,14 @@ void DrawInspector(World& world) {
             // Check for same-position entities
             bool has_ov = false;
             for (const auto& e : world.entities) {
-                if (static_cast<int>(e.id) == world.selected_id) continue;
+                if (e.id == world.selected_id) continue;
                 if (e.map_id != world.active_map_id) continue;
                 if (e.x == sel_x && e.y == sel_y) { has_ov = true; break; }
             }
             if (has_ov &&
                 ImGui::CollapsingHeader(u8"同坐标其他实体##ov", ImGuiTreeNodeFlags_DefaultOpen)) {
                 for (auto& e : world.entities) {
-                    if (static_cast<int>(e.id) == world.selected_id) continue;
+                    if (e.id == world.selected_id) continue;
                     if (e.map_id != world.active_map_id) continue;
                     if (e.x != sel_x || e.y != sel_y) continue;
                     ImGui::PushID(static_cast<int>(e.id));

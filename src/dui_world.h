@@ -77,8 +77,8 @@ struct World {
     std::vector<Entity>   entities;
     std::vector<Cell>     cells;
     uint32_t active_map_id = 0;
-    int  selected_id    = -1;   // primary selection; -1 when nothing selected
-    int  player_id      = -1;
+    uint64_t selected_id = 0;   // primary selection; 0 when nothing selected
+    uint64_t player_id   = 0;
     bool sel_cell_valid = false;
     int  sel_cell_x     = 0;
     int  sel_cell_y     = 0;

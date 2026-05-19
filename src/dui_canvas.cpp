@@ -31,15 +31,15 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- Find player ---
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
-        if (static_cast<int>(e.id) == world.player_id && e.map_id == world.active_map_id)
+        if (e.id == world.player_id && e.map_id == world.active_map_id)
             { player = &e; break; }
 
     // --- Follow mode: track selected entity, fall back to player ---
     if (view->follow_player) {
         const Entity* target = nullptr;
-        if (world.selected_id != -1)
+        if (world.selected_id != 0)
             for (const auto& e : world.entities)
-                if (static_cast<int>(e.id) == world.selected_id && e.map_id == world.active_map_id)
+                if (e.id == world.selected_id && e.map_id == world.active_map_id)
                     { target = &e; break; }
         if (!target) target = player;
         if (target) { view->cam_x = target->fx; view->cam_y = target->fy; }
@@ -315,9 +315,9 @@ void DrawCanvas(World& world, CanvasView* view) {
     {
         float bcx = player ? player->fx : fcx;
         float bcy = player ? player->fy : fcy;
-        if (world.selected_id != -1)
+        if (world.selected_id != 0)
             for (const auto& e : world.entities)
-                if (static_cast<int>(e.id) == world.selected_id && e.map_id == world.active_map_id)
+                if (e.id == world.selected_id && e.map_id == world.active_map_id)
                     { bcx = e.fx; bcy = e.fy; break; }
         float hf = kViewHalf + 0.5f;
         ImVec2 bnd[4] = {
@@ -354,7 +354,7 @@ void DrawCanvas(World& world, CanvasView* view) {
 
             // Selected outline: bright yellow for primary, dimmer for multi-select
             if (IsSelected(world, e.id)) {
-                bool primary = static_cast<int>(e.id) == world.selected_id;
+                bool primary = e.id == world.selected_id;
                 dl->AddQuad(pts[0], pts[1], pts[2], pts[3],
                             primary ? IM_COL32(255, 230, 0, 255)
                                     : IM_COL32(255, 185, 0, 140),

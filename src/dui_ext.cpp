@@ -150,11 +150,11 @@ const char* GetMapName(uint32_t map_id) {
 void SwitchActiveMap(World& w, uint32_t new_map_id) {
     w.active_map_id  = new_map_id;
     w.sel_cell_valid = false;
-    w.selected_id    = -1;
+    w.selected_id    = 0;
     w.selected_ids.clear();
     for (const auto& e : w.entities) {
         if (e.map_id == new_map_id) {
-            w.selected_id = static_cast<int>(e.id);
+            w.selected_id = e.id;
             w.selected_ids.push_back(e.id);
             break;
         }
@@ -404,16 +404,15 @@ bool IsSelected(const World& w, uint64_t id) {
 
 void SelectAdd(World& w, uint64_t id, bool set_primary) {
     if (!IsSelected(w, id)) w.selected_ids.push_back(id);
-    if (set_primary) w.selected_id = static_cast<int>(id);
+    if (set_primary) w.selected_id = id;
 }
 
 void SelectRemove(World& w, uint64_t id) {
     for (auto it = w.selected_ids.begin(); it != w.selected_ids.end(); ++it) {
         if (*it != id) continue;
         w.selected_ids.erase(it);
-        if (static_cast<int>(id) == w.selected_id)
-            w.selected_id = w.selected_ids.empty() ? -1
-                          : static_cast<int>(w.selected_ids.back());
+        if (id == w.selected_id)
+            w.selected_id = w.selected_ids.empty() ? 0 : w.selected_ids.back();
         return;
     }
 }
@@ -425,7 +424,7 @@ void SelectToggle(World& w, uint64_t id) {
 
 void SelectClear(World& w) {
     w.selected_ids.clear();
-    w.selected_id = -1;
+    w.selected_id = 0;
 }
 
 // ---- Cell Links ----
