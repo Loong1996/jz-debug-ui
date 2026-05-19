@@ -1,4 +1,5 @@
 #include "dui_ext.h"
+#include "dui_trails.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -33,6 +34,15 @@ namespace {
     // Entity links registry
     struct EntityLinksEntry { std::string name; dui::EntityLinksFn fn; };
     std::vector<EntityLinksEntry> g_entity_links;
+
+    // Cell links registry
+    struct CellLinksEntry { std::string name; dui::CellLinksFn fn; };
+    std::vector<CellLinksEntry> g_cell_links;
+
+    // Context menu registries
+    std::unordered_map<uint8_t, dui::EntityContextMenuFn> g_entity_ctx_menus;
+    std::unordered_map<uint8_t, dui::CellContextMenuFn>   g_cell_ctx_menus;
+    dui::BgContextMenuFn g_bg_ctx_menu;
 
     // User panel registry
     struct PanelEntry { std::string title; dui::PanelDrawFn fn; dui::PanelDock dock; };
@@ -223,12 +233,12 @@ float CanvasTileHalf_() { return s_cv_view.th; }
 void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl) {
     auto it = g_entity_overlays.find(e.type);
     if (it == g_entity_overlays.end()) return;
-    CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
+    CanvasOverlayCtx ctx{ CanvasToScreen_, dl, s_cv_view.th };
     it->second(e, ctx);
 }
 
 void InvokeGlobalOverlays_(const World& world, ImDrawList* dl) {
-    CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
+    CanvasOverlayCtx ctx{ CanvasToScreen_, dl, s_cv_view.th };
     for (const auto& g : g_global_overlays)
         if (g.fn) g.fn(world, ctx);
 }
@@ -242,7 +252,7 @@ void RegisterCellOverlay(uint8_t type, CellOverlayFn fn) {
 void InvokeCellOverlays_(const World& world, const Cell& c, ImDrawList* dl) {
     auto it = g_cell_overlays.find(c.type);
     if (it == g_cell_overlays.end()) return;
-    CanvasOverlayCtx ctx{ CanvasToScreen_, dl };
+    CanvasOverlayCtx ctx{ CanvasToScreen_, dl, s_cv_view.th };
     it->second(c, ctx);
 }
 
@@ -416,6 +426,101 @@ void SelectToggle(World& w, uint64_t id) {
 void SelectClear(World& w) {
     w.selected_ids.clear();
     w.selected_id = -1;
+}
+
+// ---- Cell Links ----
+
+void RegisterCellLinks(const char* name, CellLinksFn fn) {
+    if (!name) return;
+    for (auto& l : g_cell_links) {
+        if (l.name == name) { l.fn = std::move(fn); return; }
+    }
+    g_cell_links.push_back({ std::string(name), std::move(fn) });
+}
+
+void UnregisterCellLinks(const char* name) {
+    if (!name) return;
+    for (auto it = g_cell_links.begin(); it != g_cell_links.end(); ++it) {
+        if (it->name == name) { g_cell_links.erase(it); return; }
+    }
+}
+
+void InvokeCellLinks_(const World& world, ImDrawList* dl) {
+    if (g_cell_links.empty()) return;
+    for (const auto& c : world.cells) {
+        if (c.map_id != world.active_map_id) continue;
+        for (const auto& entry : g_cell_links) {
+            if (!entry.fn) continue;
+            std::vector<CellLink> links = entry.fn(c);
+            for (const auto& lk : links) {
+                ImVec2 from = CanvasToScreen_(static_cast<float>(c.x), static_cast<float>(c.y));
+                ImVec2 to   = CanvasToScreen_(static_cast<float>(lk.target_x), static_cast<float>(lk.target_y));
+                if (lk.arrow) DrawArrow_(dl, from, to, lk.color, lk.thickness, lk.dashed);
+                else          DrawLine_ (dl, from, to, lk.color, lk.thickness, lk.dashed);
+            }
+        }
+    }
+}
+
+// ---- Context Menus ----
+
+void RegisterEntityContextMenu(uint8_t type, EntityContextMenuFn fn) {
+    g_entity_ctx_menus[type] = std::move(fn);
+}
+void RegisterCellContextMenu(uint8_t type, CellContextMenuFn fn) {
+    g_cell_ctx_menus[type] = std::move(fn);
+}
+void RegisterCanvasBackgroundContextMenu(BgContextMenuFn fn) {
+    g_bg_ctx_menu = std::move(fn);
+}
+void UnregisterEntityContextMenu(uint8_t type) { g_entity_ctx_menus.erase(type); }
+void UnregisterCellContextMenu  (uint8_t type) { g_cell_ctx_menus.erase(type); }
+void UnregisterCanvasBackgroundContextMenu()   { g_bg_ctx_menu = nullptr; }
+
+bool HasEntityContextMenu_(uint8_t type) { return g_entity_ctx_menus.count(type) > 0; }
+bool HasCellContextMenu_  (uint8_t type) { return g_cell_ctx_menus.count(type) > 0; }
+bool HasBgContextMenu_    ()             { return g_bg_ctx_menu != nullptr; }
+
+bool InvokeEntityContextMenu_(Entity& e, const CanvasContextCtx& ctx) {
+    auto it = g_entity_ctx_menus.find(e.type);
+    if (it == g_entity_ctx_menus.end()) return false;
+    it->second(e, ctx);
+    return true;
+}
+bool InvokeCellContextMenu_(Cell& c, const CanvasContextCtx& ctx) {
+    auto it = g_cell_ctx_menus.find(c.type);
+    if (it == g_cell_ctx_menus.end()) return false;
+    it->second(c, ctx);
+    return true;
+}
+bool InvokeBgContextMenu_(const CanvasContextCtx& ctx) {
+    if (!g_bg_ctx_menu) return false;
+    g_bg_ctx_menu(ctx.wx, ctx.wy);
+    return true;
+}
+
+// ---- World helpers ----
+
+bool DespawnEntity(World& w, uint64_t id) {
+    for (auto it = w.entities.begin(); it != w.entities.end(); ++it) {
+        if (it->id != id) continue;
+        w.entities.erase(it);
+        SelectRemove(w, id);
+        ClearEntityMarker(id);
+        ClearTrailsFor(id);
+        return true;
+    }
+    return false;
+}
+
+Entity& SpawnEntityAt(World& w, float fx, float fy, uint8_t type, const char* label) {
+    uint64_t new_id = 1;
+    for (const auto& e : w.entities)
+        if (e.id >= new_id) new_id = e.id + 1;
+    Entity& e = w.SpawnEntity(new_id);
+    e.SetPos(fx, fy).SetType(type).SetMapId(w.active_map_id);
+    if (label) e.SetLabel("%s", label);
+    return e;
 }
 
 } // namespace dui

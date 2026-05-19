@@ -45,9 +45,30 @@ using EntityDetailTextFn    = std::function<std::string(const Entity&)>;
 using EntityDetailBuilderFn = std::function<void(const Entity&, DetailBuilder&)>;
 
 void RegisterEntityDetailText(uint8_t type, EntityDetailTextFn    fn);
-void RegisterEntityDetailText(uint8_t type, EntityDetailBuilderFn fn);  // builder overload
+void RegisterEntityDetailText(uint8_t type, EntityDetailBuilderFn fn);
 
 std::string InvokeEntityDetailText(const Entity& e);
+
+// ---- Cell detail text (symmetric to RegisterEntityDetailText) ----
+using CellDetailTextFn    = std::function<std::string(const Cell&)>;
+using CellDetailBuilderFn = std::function<void(const Cell&, DetailBuilder&)>;
+
+void RegisterCellDetailText(uint8_t type, CellDetailTextFn    fn);
+void RegisterCellDetailText(uint8_t type, CellDetailBuilderFn fn);
+
+std::string InvokeCellDetailText(const Cell& c);
+
+// ---- Live entity/cell editor (read-write; body uses ImGui::Drag*/Slider*/ColorEdit*) ----
+using EntityEditFn = std::function<void(Entity&)>;
+using CellEditFn   = std::function<void(Cell&)>;
+
+void RegisterEntityEditor(uint8_t type, EntityEditFn fn);
+void RegisterCellEditor  (uint8_t type, CellEditFn   fn);
+
+// Internal — called by DrawEntityDetail and Inspector cell section.
+bool InvokeCellDetailText_(const Cell& c);   // returns true if text was non-empty
+bool InvokeEntityEditor_  (Entity& e);        // returns true if drawer registered
+bool InvokeCellEditor_    (Cell& c);
 
 void DrawEntityDetail(World& world);
 

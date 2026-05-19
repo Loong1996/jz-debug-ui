@@ -416,8 +416,11 @@ void DrawCanvas(World& world, CanvasView* view) {
     }
     InvokeGlobalOverlays_(world, dl);
 
-    // --- 5c. Entity links ---
-    if (view->show_links) InvokeEntityLinks_(world, dl);
+    // --- 5c. Entity links and cell links ---
+    if (view->show_links) {
+        InvokeEntityLinks_(world, dl);
+        InvokeCellLinks_  (world, dl);
+    }
 
     // --- 6. Axis indicator ---
     dl->PopClipRect();
@@ -562,6 +565,68 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
         if (s_popup_nskipped > 0)
             ImGui::TextDisabled(u8"(+%d more)", s_popup_nskipped);
+        ImGui::EndPopup();
+    }
+
+    // --- Right-click context menu (released without dragging > 6px) ---
+    struct CtxHit { int kind; int index; };
+    static CtxHit s_ctx_hits[32];
+    static int    s_ctx_nhits = 0;
+    static float  s_ctx_wx = 0.f, s_ctx_wy = 0.f;
+
+    if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+        ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+        if (drag.x * drag.x + drag.y * drag.y < 36.f) {
+            int cwx, cwy;
+            ToWorld(ImGui::GetIO().MousePos, cwx, cwy);
+            s_ctx_wx = static_cast<float>(cwx);
+            s_ctx_wy = static_cast<float>(cwy);
+            s_ctx_nhits = 0;
+            bool has_any = HasBgContextMenu_();
+            for (int i = 0; i < static_cast<int>(world.entities.size()); ++i) {
+                const auto& e = world.entities[i];
+                if (e.map_id != world.active_map_id || e.x != cwx || e.y != cwy) continue;
+                has_any = true;
+                if (HasEntityContextMenu_(e.type) && s_ctx_nhits < 32)
+                    s_ctx_hits[s_ctx_nhits++] = { 0, i };
+            }
+            for (int i = 0; i < static_cast<int>(world.cells.size()); ++i) {
+                const auto& c = world.cells[i];
+                if (c.map_id != world.active_map_id || c.x != cwx || c.y != cwy) continue;
+                has_any = true;
+                if (HasCellContextMenu_(c.type) && s_ctx_nhits < 32)
+                    s_ctx_hits[s_ctx_nhits++] = { 1, i };
+            }
+            if (has_any) ImGui::OpenPopup("##canvas_ctx");
+        }
+    }
+    if (ImGui::BeginPopup("##canvas_ctx")) {
+        CanvasContextCtx cctx{ &world, ImGui::GetMousePos(), s_ctx_wx, s_ctx_wy, world.active_map_id };
+        bool first = true;
+        for (int i = 0; i < s_ctx_nhits; ++i) {
+            const CtxHit& h = s_ctx_hits[i];
+            if (h.kind == 0) {
+                auto& e = world.entities[h.index];
+                if (!first) ImGui::Separator();
+                const char* tn = GetEntityTypeName(e.type); char fb[16];
+                if (!tn) { std::snprintf(fb, sizeof(fb), "Type %u", static_cast<unsigned>(e.type)); tn = fb; }
+                ImGui::TextDisabled("[E %s] %s", tn, e.label);
+                InvokeEntityContextMenu_(e, cctx);
+                first = false;
+            } else {
+                auto& c = world.cells[h.index];
+                if (!first) ImGui::Separator();
+                const char* tn = GetCellTypeName(c.type); char fb[16];
+                if (!tn) { std::snprintf(fb, sizeof(fb), "Type %u", static_cast<unsigned>(c.type)); tn = fb; }
+                ImGui::TextDisabled("[C %s] %s", tn, c.label);
+                InvokeCellContextMenu_(c, cctx);
+                first = false;
+            }
+        }
+        if (HasBgContextMenu_()) {
+            if (!first) ImGui::Separator();
+            InvokeBgContextMenu_(cctx);
+        }
         ImGui::EndPopup();
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "dui_world.h"
 #include <functional>
+#include <cmath>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
@@ -71,8 +72,77 @@ std::string InvokeEntityLabel    (const Entity& e);
 // ToScreen converts world-space coordinates to screen pixels.
 
 struct CanvasOverlayCtx {
-    ImVec2 (*ToScreen)(float wx, float wy);  // reads thread_local view state set by DrawCanvas
+    ImVec2 (*ToScreen)(float wx, float wy); // reads thread_local view state set by DrawCanvas
     ImDrawList* dl;
+    float tile_half; // screen pixels per world unit; set each frame by DrawCanvas
+
+    // World-space drawing helpers. Coordinates and radii are in world units.
+    void DrawCircle(float cx, float cy, float r_world, uint32_t col, float thickness = 1.5f) const {
+        dl->AddCircle(ToScreen(cx, cy), r_world * tile_half, col, 24, thickness);
+    }
+    void DrawCircleFilled(float cx, float cy, float r_world, uint32_t col) const {
+        dl->AddCircleFilled(ToScreen(cx, cy), r_world * tile_half, col, 24);
+    }
+    void DrawLine(float x0, float y0, float x1, float y1, uint32_t col, float thickness = 1.5f) const {
+        dl->AddLine(ToScreen(x0, y0), ToScreen(x1, y1), col, thickness);
+    }
+    void DrawRect(float x0, float y0, float x1, float y1, uint32_t col, float thickness = 1.5f) const {
+        ImVec2 p00 = ToScreen(x0, y0), p10 = ToScreen(x1, y0);
+        ImVec2 p11 = ToScreen(x1, y1), p01 = ToScreen(x0, y1);
+        dl->AddQuad(p00, p10, p11, p01, col, thickness);
+    }
+    void DrawRectFilled(float x0, float y0, float x1, float y1, uint32_t col) const {
+        ImVec2 p00 = ToScreen(x0, y0), p10 = ToScreen(x1, y0);
+        ImVec2 p11 = ToScreen(x1, y1), p01 = ToScreen(x0, y1);
+        dl->AddQuadFilled(p00, p10, p11, p01, col);
+    }
+    void DrawArrow(float x0, float y0, float x1, float y1, uint32_t col,
+                   float thickness = 1.5f, float head_px = 9.f) const {
+        ImVec2 from = ToScreen(x0, y0), to = ToScreen(x1, y1);
+        dl->AddLine(from, to, col, thickness);
+        float dx = to.x - from.x, dy = to.y - from.y;
+        float len = sqrtf(dx * dx + dy * dy);
+        if (len > head_px) {
+            float nx = dx / len, ny = dy / len, hf = head_px * 0.45f;
+            float px = -ny * hf, py = nx * hf;
+            dl->AddTriangleFilled(to,
+                ImVec2(to.x - nx * head_px + px, to.y - ny * head_px + py),
+                ImVec2(to.x - nx * head_px - px, to.y - ny * head_px - py), col);
+        }
+    }
+    // DrawCone: filled sector. (cx,cy) = apex, (dx,dy) = direction (any magnitude),
+    // r_world = radius, half_angle_rad = half-aperture.
+    void DrawCone(float cx, float cy, float dx, float dy,
+                  float r_world, float half_angle_rad, uint32_t col) const {
+        ImVec2 cen = ToScreen(cx, cy);
+        ImVec2 tip = ToScreen(cx + dx * r_world, cy + dy * r_world);
+        float sdx = tip.x - cen.x, sdy = tip.y - cen.y;
+        float slen = sqrtf(sdx * sdx + sdy * sdy);
+        if (slen < 0.1f) return;
+        float ang = atan2f(sdy, sdx);
+        float rpx = r_world * tile_half;
+        const int N = 16;
+        ImVec2 pts[N + 2];
+        pts[0] = cen;
+        for (int i = 0; i <= N; ++i) {
+            float a = ang - half_angle_rad + half_angle_rad * 2.f * i / N;
+            pts[1 + i] = ImVec2(cen.x + cosf(a) * rpx, cen.y + sinf(a) * rpx);
+        }
+        dl->AddConvexPolyFilled(pts, N + 2, col);
+    }
+    void DrawTextWorld(float wx, float wy, uint32_t col, const char* text) const {
+        if (text) dl->AddText(ToScreen(wx, wy), col, text);
+    }
+    // world_pts: array of world-space ImVec2 coordinates
+    void DrawPolyline(const ImVec2* world_pts, int n, uint32_t col,
+                      float thickness = 1.5f, bool closed = false) const {
+        for (int i = 1; i < n; ++i)
+            dl->AddLine(ToScreen(world_pts[i-1].x, world_pts[i-1].y),
+                        ToScreen(world_pts[i].x,   world_pts[i].y), col, thickness);
+        if (closed && n >= 3)
+            dl->AddLine(ToScreen(world_pts[n-1].x, world_pts[n-1].y),
+                        ToScreen(world_pts[0].x,   world_pts[0].y), col, thickness);
+    }
 };
 
 using EntityOverlayFn = std::function<void(const Entity&, const CanvasOverlayCtx&)>;
@@ -128,10 +198,50 @@ using EntityLinksFn = std::function<std::vector<EntityLink>(const Entity&)>;
 void RegisterEntityLinks  (const char* name, EntityLinksFn fn);
 void UnregisterEntityLinks(const char* name);
 
+// ---- Cell Links API ----
+// Symmetric to RegisterEntityLinks: draw directed connectors between cells.
+struct CellLink {
+    int      target_x, target_y;
+    uint32_t color     = RGBA(100, 200, 100, 180);
+    float    thickness = 1.5f;
+    bool     arrow     = true;
+    bool     dashed    = false;
+};
+using CellLinksFn = std::function<std::vector<CellLink>(const Cell&)>;
+void RegisterCellLinks  (const char* name, CellLinksFn fn);
+void UnregisterCellLinks(const char* name);
+
+// ---- Canvas Context Menu API ----
+// Right-click on an entity/cell/background opens a registered context menu.
+// Inside the callback: call ImGui::MenuItem / ImGui::Separator etc. freely.
+struct CanvasContextCtx {
+    World*   world;
+    ImVec2   click_screen; // screen coords of right-click
+    float    wx, wy;       // world tile coords at click position
+    uint32_t map_id;
+};
+using EntityContextMenuFn = std::function<void(Entity&, const CanvasContextCtx&)>;
+using CellContextMenuFn   = std::function<void(Cell&,   const CanvasContextCtx&)>;
+using BgContextMenuFn     = std::function<void(float wx, float wy)>;
+
+void RegisterEntityContextMenu(uint8_t type, EntityContextMenuFn fn);
+void RegisterCellContextMenu  (uint8_t type, CellContextMenuFn   fn);
+void RegisterCanvasBackgroundContextMenu(BgContextMenuFn fn);
+void UnregisterEntityContextMenu(uint8_t type);
+void UnregisterCellContextMenu  (uint8_t type);
+void UnregisterCanvasBackgroundContextMenu();
+
+// ---- World modification helpers ----
+// DespawnEntity removes the entity, cleans up selection, trails, and per-entity marker.
+// SpawnEntityAt creates a new entity at (fx, fy) on the current active map.
+bool    DespawnEntity(World& w, uint64_t id);
+Entity& SpawnEntityAt(World& w, float fx, float fy, uint8_t type,
+                      const char* label = nullptr);
+
 // Internal — called by DrawCanvas.
 void  SetCanvasViewState_(float fcx, float fcy, float th, ImVec2 center);
 ImVec2 CanvasToScreen_(float wx, float wy);
-float  CanvasTileHalf_();  // current tile half-width in screen pixels
+float  CanvasTileHalf_();
 void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl);
 void InvokeGlobalOverlays_(const World& world, ImDrawList* dl);
 void InvokeCellOverlays_  (const World& world, const Cell& c, ImDrawList* dl);
@@ -139,6 +249,14 @@ void InvokeCellOverlays_  (const World& world, const Cell& c, ImDrawList* dl);
 void InvokeCellHeatmaps_  (const World& world, ImDrawList* dl,
                             int ccx, int ccy, int view_half);
 void InvokeEntityLinks_   (const World& world, ImDrawList* dl);
+void InvokeCellLinks_     (const World& world, ImDrawList* dl);
+// Returns true if any items were added to the open popup.
+bool InvokeEntityContextMenu_(Entity& e, const CanvasContextCtx& ctx);
+bool InvokeCellContextMenu_  (Cell& c,   const CanvasContextCtx& ctx);
+bool InvokeBgContextMenu_    (const CanvasContextCtx& ctx);
+bool HasEntityContextMenu_   (uint8_t type);
+bool HasCellContextMenu_     (uint8_t type);
+bool HasBgContextMenu_       ();
 
 // ---- User Panel API ----
 // RegisterPanel lets users add ImGui windows into the existing dock layout.

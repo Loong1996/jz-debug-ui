@@ -67,26 +67,85 @@ void SetupRegistrations(World& world) {
           .KVFmt(u8"Color", "0x%08X", static_cast<unsigned>(e.color));
     });
 
-    // Canvas overlay: draw velocity vector for type-1 entities
+    // Canvas overlay: velocity arrow + vision cone + aggro circle for type-1 warriors
     RegisterEntityOverlay(1, [](const Entity& e, const CanvasOverlayCtx& ctx) {
+        // Velocity arrow (uses new DrawArrow helper)
         float speed = e.vx * e.vx + e.vy * e.vy;
-        if (speed < 0.01f) return;
-        ImVec2 from = ctx.ToScreen(e.fx, e.fy);
-        float scale = 3.f;
-        ImVec2 to   = ctx.ToScreen(e.fx + e.vx * scale, e.fy + e.vy * scale);
-        ctx.dl->AddLine(from, to, IM_COL32(255, 220, 60, 200), 1.5f);
-        // Arrowhead
-        float dx = to.x - from.x, dy = to.y - from.y;
-        float len = sqrtf(dx*dx + dy*dy);
-        if (len > 4.f) {
-            float nx = dx / len, ny = dy / len;
-            float px = -ny * 4.f, py = nx * 4.f;
-            ctx.dl->AddTriangleFilled(
-                to,
-                ImVec2(to.x - nx * 8.f + px, to.y - ny * 8.f + py),
-                ImVec2(to.x - nx * 8.f - px, to.y - ny * 8.f - py),
-                IM_COL32(255, 220, 60, 200));
+        if (speed > 0.01f)
+            ctx.DrawArrow(e.fx, e.fy, e.fx + e.vx * 3.f, e.fy + e.vy * 3.f,
+                          IM_COL32(255, 220, 60, 200));
+        // Vision cone — 120° forward view, radius 4 world units
+        float vlen = sqrtf(speed);
+        float dx = vlen > 0.01f ? e.vx / vlen : 1.f;
+        float dy = vlen > 0.01f ? e.vy / vlen : 0.f;
+        ctx.DrawCone(e.fx, e.fy, dx, dy, 4.f, 1.047f,  // 60° half-angle
+                     IM_COL32(255, 220, 60, 35));
+        // Aggro radius — 2 world units
+        ctx.DrawCircle(e.fx, e.fy, 2.f, IM_COL32(255, 80, 80, 100), 1.f);
+    });
+
+    // ---- Context menu demo: right-click type-1 warriors ----
+    RegisterEntityContextMenu(1, [wp](Entity& e, const CanvasContextCtx& ctx) {
+        if (ImGui::MenuItem(u8"传送到此处")) {
+            e.SetPos(ctx.wx, ctx.wy).SetVel(0.f, 0.f);
+            Log(u8"warrior #%llu teleported to (%.0f, %.0f)",
+                static_cast<unsigned long long>(e.id), ctx.wx, ctx.wy);
         }
+        if (ImGui::MenuItem(u8"染红")) e.SetColor(220, 60, 60);
+        if (ImGui::MenuItem(u8"染蓝")) e.SetColor(60, 120, 255);
+        if (ImGui::MenuItem(u8"停止移动")) e.SetVel(0.f, 0.f);
+        ImGui::Separator();
+        if (ImGui::MenuItem(u8"删除")) {
+            DespawnEntity(*ctx.world, e.id);
+            Log(u8"warrior #%llu despawned", static_cast<unsigned long long>(e.id));
+        }
+    });
+
+    // Background context menu: spawn a new warrior at the right-clicked position
+    RegisterCanvasBackgroundContextMenu([wp](float bx, float by) {
+        if (ImGui::MenuItem(u8"在此生成战士")) {
+            Entity& ne = SpawnEntityAt(*wp, bx, by, 1, u8"新战士");
+            ne.SetColor(100, 200, 100);
+            Log(u8"spawned warrior #%llu at (%.0f, %.0f)",
+                static_cast<unsigned long long>(ne.id), bx, by);
+        }
+    });
+
+    // ---- Entity editor demo: drag-edit type-1 velocity and color ----
+    RegisterEntityEditor(1, [](Entity& e) {
+        ImGui::DragFloat2(u8"速度", &e.vx, 0.05f, -5.f, 5.f);
+        ImGui::DragFloat(u8"半径", &e.radius, 0.01f, 0.1f, 1.5f);
+        float col[3] = {
+            static_cast<float>(e.color & 0xFF) / 255.f,
+            static_cast<float>((e.color >> 8) & 0xFF) / 255.f,
+            static_cast<float>((e.color >> 16) & 0xFF) / 255.f,
+        };
+        if (ImGui::ColorEdit3(u8"颜色", col))
+            e.SetColor(static_cast<uint8_t>(col[0]*255),
+                       static_cast<uint8_t>(col[1]*255),
+                       static_cast<uint8_t>(col[2]*255));
+    });
+
+    // ---- Cell detail text demo: type-1 wall cells show passability info ----
+    RegisterCellDetailText(1, [](const Cell& c, DetailBuilder& db) {
+        db.Section(u8"属性")
+          .KV(u8"可通行", "否")
+          .KV(u8"类型",   "墙壁")
+          .KVFmt(u8"坐标", "(%d, %d)", c.x, c.y);
+    });
+
+    // ---- Cell links demo: type-2 (水域) cells link to nearest type-3 (陷阱) cell ----
+    RegisterCellLinks(u8"水→陷阱", [wp](const Cell& src) -> std::vector<CellLink> {
+        if (src.type != 2) return {};
+        float best = 1e30f; int bx = 0, by = 0; bool found = false;
+        for (const auto& c : wp->cells) {
+            if (c.type != 3 || c.map_id != src.map_id) continue;
+            float dx = static_cast<float>(c.x - src.x), dy = static_cast<float>(c.y - src.y);
+            float d2 = dx * dx + dy * dy;
+            if (d2 < best) { best = d2; bx = c.x; by = c.y; found = true; }
+        }
+        if (!found) return {};
+        return { { bx, by, RGBA(80, 200, 255, 180), 1.5f, true, true } };
     });
 
     // Zero-arg commands
@@ -234,6 +293,14 @@ void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
     if (EveryNSeconds(0.5f, dt, mem_acc))
         Watch("mem/heap_kb", static_cast<float>(world.entities.size() * 128 + 4096));
     Watch("ai/state", (tick_count % 7 < 3) ? "patrol" : "chase");
+
+    // Tunable demo: live-adjustable AI aggression drives the warrior color intensity
+    static float s_aggro   = 0.5f;
+    static bool  s_freeze  = false;
+    Tunable(u8"ai/攻击强度", &s_aggro, 0.f, 1.f);
+    Tunable(u8"ai/冻结实体", &s_freeze);
+    if (!s_freeze)
+        Watch(u8"ai/aggro_pct", static_cast<int>(s_aggro * 100));
 }
 
 } // namespace demo

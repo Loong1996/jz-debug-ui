@@ -1,5 +1,6 @@
 #include "dui_inspector.h"
 #include "dui_ext.h"
+#include "dui_detail.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cstring>
@@ -51,6 +52,11 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
                 SelectClear(world);
                 if (!selected) SelectAdd(world, e.id);
             }
+        }
+        if (HasEntityContextMenu_(e.type) && ImGui::BeginPopupContextItem("##ectx")) {
+            CanvasContextCtx cctx{ &world, ImGui::GetMousePos(), e.fx, e.fy, world.active_map_id };
+            InvokeEntityContextMenu_(e, cctx);
+            ImGui::EndPopup();
         }
         ImGui::SameLine(0.f, 0.f);
         { const char* tn = GetEntityTypeName(e.type); char fb[16];
@@ -391,6 +397,16 @@ void DrawInspector(World& world) {
                 if (ImGui::CollapsingHeader(chdr, ImGuiTreeNodeFlags_DefaultOpen)) {
                     ImGui::Text(u8"坐标: (%d, %d)", c.x, c.y);
                     InvokeCellDrawer(c);
+                    // Registered cell detail text (RegisterCellDetailText)
+                    std::string ctext = InvokeCellDetailText(c);
+                    if (!ctext.empty()) {
+                        ImGui::Separator();
+                        ImGui::TextUnformatted(ctext.c_str(), ctext.c_str() + ctext.size());
+                    }
+                    // Registered cell editor (RegisterCellEditor)
+                    if (ImGui::CollapsingHeader(u8"编辑##cedit")) {
+                        InvokeCellEditor_(c);
+                    }
                 }
                 ImGui::PopStyleColor(3);
                 ImGui::PopID();

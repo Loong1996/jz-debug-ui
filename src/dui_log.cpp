@@ -27,8 +27,16 @@ struct WatchEntry {
     RingBuffer<float, 64> history;
 };
 
+struct TunableEntry {
+    char  name[64];
+    enum class Kind : uint8_t { Float, Int, Bool } kind;
+    float lo, hi;
+    union { float* fp; int* ip; bool* bp; } ptr;
+};
+
 static RingBuffer<LogEntry, 1000> s_log;
 static std::vector<WatchEntry>    s_watch;
+static std::vector<TunableEntry>  s_tunables;
 
 static void make_timestamp(char* buf, size_t n) {
     using namespace std::chrono;
@@ -89,6 +97,28 @@ static bool export_log(const char* filter, bool show_info, bool show_warn, bool 
     return true;
 }
 
+static bool export_watch_csv() {
+    OPENFILENAMEW ofn = {};
+    wchar_t path[MAX_PATH] = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = L"CSV Files (*.csv)\0*.csv\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile   = path;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = L"csv";
+    if (!GetSaveFileNameW(&ofn)) return false;
+    FILE* f = nullptr;
+    _wfopen_s(&f, path, L"wb");
+    if (!f) return false;
+    const unsigned char bom[3] = { 0xEF, 0xBB, 0xBF };
+    fwrite(bom, 1, 3, f);
+    std::fprintf(f, "name,value\n");
+    for (const auto& w : s_watch)
+        std::fprintf(f, "\"%s\",\"%s\"\n", w.name, w.value);
+    fclose(f);
+    return true;
+}
+
 } // anonymous namespace
 
 void Log(const char* fmt, ...) {
@@ -140,6 +170,36 @@ void RemoveWatch(const char* name) {
 }
 void ClearWatch() {
     s_watch.clear();
+}
+
+void Tunable(const char* name, float* value, float lo, float hi) {
+    if (!name || !value) return;
+    for (auto& t : s_tunables)
+        if (std::strcmp(t.name, name) == 0) { t.ptr.fp = value; t.lo = lo; t.hi = hi; return; }
+    TunableEntry t{}; std::snprintf(t.name, sizeof(t.name), "%s", name);
+    t.kind = TunableEntry::Kind::Float; t.lo = lo; t.hi = hi; t.ptr.fp = value;
+    s_tunables.push_back(t);
+}
+void Tunable(const char* name, int* value, int lo, int hi) {
+    if (!name || !value) return;
+    for (auto& t : s_tunables)
+        if (std::strcmp(t.name, name) == 0) { t.ptr.ip = value; t.lo = static_cast<float>(lo); t.hi = static_cast<float>(hi); return; }
+    TunableEntry t{}; std::snprintf(t.name, sizeof(t.name), "%s", name);
+    t.kind = TunableEntry::Kind::Int; t.lo = static_cast<float>(lo); t.hi = static_cast<float>(hi); t.ptr.ip = value;
+    s_tunables.push_back(t);
+}
+void Tunable(const char* name, bool* value) {
+    if (!name || !value) return;
+    for (auto& t : s_tunables)
+        if (std::strcmp(t.name, name) == 0) { t.ptr.bp = value; return; }
+    TunableEntry t{}; std::snprintf(t.name, sizeof(t.name), "%s", name);
+    t.kind = TunableEntry::Kind::Bool; t.ptr.bp = value;
+    s_tunables.push_back(t);
+}
+void RemoveTunable(const char* name) {
+    s_tunables.erase(std::remove_if(s_tunables.begin(), s_tunables.end(),
+        [name](const TunableEntry& t) { return std::strcmp(t.name, name) == 0; }),
+        s_tunables.end());
 }
 
 void DrawLog() {
@@ -283,9 +343,39 @@ void DrawWatch() {
     ImGui::Begin(u8"监视");
 
     static char watch_filter[64] = {};
-    ImGui::SetNextItemWidth(-1.f);
+    float csv_btn_w = ImGui::CalcTextSize("CSV...").x
+                    + ImGui::GetStyle().FramePadding.x * 2.f + 6.f;
+    ImGui::SetNextItemWidth(-csv_btn_w);
     ImGui::InputTextWithHint("##wf", u8"过滤名称", watch_filter, sizeof(watch_filter));
+    ImGui::SameLine();
+    if (ImGui::SmallButton("CSV...")) export_watch_csv();
     ImGui::Separator();
+
+    // --- Tunables section ---
+    if (!s_tunables.empty() &&
+        ImGui::CollapsingHeader(u8"调节器##tunables", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (auto& t : s_tunables) {
+            ImGui::PushID(t.name);
+            const char* lbl = std::strchr(t.name, '/');
+            lbl = lbl ? lbl + 1 : t.name;
+            switch (t.kind) {
+                case TunableEntry::Kind::Float:
+                    ImGui::SetNextItemWidth(-1.f);
+                    ImGui::SliderFloat(lbl, t.ptr.fp, t.lo, t.hi);
+                    break;
+                case TunableEntry::Kind::Int:
+                    ImGui::SetNextItemWidth(-1.f);
+                    ImGui::SliderInt(lbl, t.ptr.ip,
+                                     static_cast<int>(t.lo), static_cast<int>(t.hi));
+                    break;
+                case TunableEntry::Kind::Bool:
+                    ImGui::Checkbox(lbl, t.ptr.bp);
+                    break;
+            }
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+    }
 
     auto pass_watch = [&](const WatchEntry& w) {
         return watch_filter[0] == '\0' || std::strstr(w.name, watch_filter) != nullptr;

@@ -4,6 +4,10 @@
 #include <implot.h>
 #include <string>
 #include <vector>
+#include <cstdio>
+#pragma push_macro("SetProp")
+#include <windows.h>
+#pragma pop_macro("SetProp")
 
 namespace dui {
 namespace {
@@ -52,6 +56,39 @@ static std::vector<PlotGroup> build_groups() {
     return groups;
 }
 
+static void export_metrics_csv() {
+    if (s_metrics.empty()) return;
+    wchar_t path[MAX_PATH] = {};
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = L"CSV\0*.csv\0All\0*.*\0";
+    ofn.lpstrFile   = path;
+    ofn.nMaxFile    = MAX_PATH;
+    ofn.lpstrDefExt = L"csv";
+    ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+    if (!GetSaveFileNameW(&ofn)) return;
+    FILE* f = _wfopen(path, L"wb");
+    if (!f) return;
+    fwrite("\xEF\xBB\xBF", 1, 3, f);  // UTF-8 BOM
+    fputs("index", f);
+    for (const auto& m : s_metrics) { fputs(",", f); fputs(m.name.c_str(), f); }
+    fputs("\n", f);
+    int max_count = 0;
+    for (const auto& m : s_metrics) if (m.buf.plot_count() > max_count) max_count = m.buf.plot_count();
+    for (int i = 0; i < max_count; i++) {
+        fprintf(f, "%d", i);
+        for (const auto& m : s_metrics) {
+            int cnt = m.buf.plot_count();
+            if (i < cnt)
+                fprintf(f, ",%.4f", m.buf.data()[(m.buf.plot_offset() + i) % 300]);
+            else
+                fputs(",", f);
+        }
+        fputs("\n", f);
+    }
+    fclose(f);
+}
+
 } // anonymous namespace
 
 void Metric::Push(float value) const {
@@ -73,6 +110,7 @@ void PushMetric(const char* name, float value) {
 
 void DrawUserMetrics() {
     if (s_metrics.empty()) return;
+    if (ImGui::SmallButton(u8"Export CSV...")) export_metrics_csv();
     ImGui::Separator();
 
     auto groups = build_groups();

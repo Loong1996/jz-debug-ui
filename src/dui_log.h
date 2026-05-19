@@ -36,6 +36,13 @@ inline bool EveryNSeconds(float interval, float dt, float& accumulator) {
 void RemoveWatch(const char* name);
 void ClearWatch();
 
+// Tunables: live-editable values displayed as sliders/checkboxes in the Watch panel.
+// The pointer must remain valid for the lifetime of the registration.
+void Tunable(const char* name, float* value, float lo, float hi);
+void Tunable(const char* name, int*   value, int   lo, int   hi);
+void Tunable(const char* name, bool*  value);
+void RemoveTunable(const char* name);
+
 void DrawLog();
 void DrawWatch();
 
