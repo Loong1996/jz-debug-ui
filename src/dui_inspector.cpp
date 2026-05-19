@@ -157,7 +157,7 @@ void DrawInspector(World& world) {
         }
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
         ImGui::TextUnformatted(u8"地图"); ImGui::SameLine();
-        ImGui::SetNextItemWidth(160.f);
+        ImGui::SetNextItemWidth(-1.f);
         if (ImGui::Combo("##insp_map", &map_combo_idx, map_items, n_all_maps) && n_all_maps > 0)
             SwitchActiveMap(world, all_map_ids[map_combo_idx]);
         ImGui::PopStyleVar();
