@@ -12,13 +12,16 @@ static bool  g_enabled    = false;
 static int   g_trail_len  = 60;
 static std::unordered_map<uint64_t, std::deque<TrailSample>> g_trails;
 
-// Tile visit heat: key encodes (x, y), value is accumulated frequency.
+// Tile visit heat: key encodes (map_id, x, y), value is accumulated frequency.
 static std::unordered_map<uint64_t, float> g_tile_heat;
 static float g_tile_decay = 0.99f;
 
-static uint64_t TileKey(int x, int y) {
-    return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) |
-            static_cast<uint32_t>(y);
+// Pack map_id into high 16 bits of x-half so each map has its own key space.
+// map_id is truncated to 16 bits — sufficient for any realistic number of maps.
+static uint64_t TileKey(uint32_t map_id, int x, int y) {
+    uint32_t xpart = (static_cast<uint32_t>(x) & 0x0000FFFFu)
+                   | ((map_id & 0xFFFFu) << 16);
+    return (static_cast<uint64_t>(xpart) << 32) | static_cast<uint32_t>(y);
 }
 
 } // namespace
@@ -104,12 +107,12 @@ void AccumulateTileVisits(const World& world) {
     // visible trail length naturally.
     for (const auto& e : world.entities) {
         if (e.map_id != world.active_map_id) continue;
-        g_tile_heat[TileKey(e.x, e.y)] = 1.f;
+        g_tile_heat[TileKey(e.map_id, e.x, e.y)] = 1.f;
     }
 }
 
-float GetTileVisitHeat(int x, int y) {
-    auto it = g_tile_heat.find(TileKey(x, y));
+float GetTileVisitHeat(uint32_t map_id, int x, int y) {
+    auto it = g_tile_heat.find(TileKey(map_id, x, y));
     return it != g_tile_heat.end() ? it->second : 0.f;
 }
 

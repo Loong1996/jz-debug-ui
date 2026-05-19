@@ -166,7 +166,7 @@ void DrawEvents() {
             ImVec2 mp = ImGui::GetMousePos();
             float dx = mp.x - ex, dy = mp.y - ey;
             if (dx*dx + dy*dy < 36.f) {
-                ImGui::SetTooltip("[%.2fs] %s: %s", ev.time, s_cats[ci].name.c_str(), ev.text);
+                ImGui::SetTooltip("[-%0.2fs] %s: %s", display_time - ev.time, s_cats[ci].name.c_str(), ev.text);
                 hover_found = true;
             }
         }

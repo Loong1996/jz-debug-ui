@@ -72,7 +72,7 @@ std::string GetHotkeyLabel(const char* command_name) {
 }
 
 void ProcessHotkeys() {
-    if (ImGui::GetIO().WantCaptureKeyboard && !ImGui::IsAnyItemActive()) return;
+    if (ImGui::GetIO().WantCaptureKeyboard) return;
     ImGuiIO& io = ImGui::GetIO();
     int cur_mods = 0;
     if (io.KeyCtrl)  cur_mods |= ImGuiMod_Ctrl;

@@ -141,8 +141,8 @@ void SetupRegistrations(World& world) {
     RegisterCellOverlay(3, draw_x_icon);
 
     // ---- Heatmap demo: tile visit frequency — redder = more often walked over ----
-    RegisterCellHeatmap(u8"经过频率", [](int x, int y) -> float {
-        return GetTileVisitHeat(x, y);
+    RegisterCellHeatmap(u8"经过频率", [wp](int x, int y) -> float {
+        return GetTileVisitHeat(wp->active_map_id, x, y);
     }, { 0.f, 1.f, RGBA(0, 60, 180, 0), RGBA(255, 60, 0, 220), true });
 
     // ---- Entity links demo: each type-1 warrior points to its nearest same-type peer ----

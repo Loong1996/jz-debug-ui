@@ -26,7 +26,7 @@ void  SetTileVisitDecay(float decay); // 0 < decay < 1; default 0.99
                                       // closer to 0 = faster fade (shorter trail)
                                       // 0.99 → half-life ~70 calls (~1s at 60fps)
                                       // 0.90 → half-life ~7 calls  (~0.1s at 60fps)
-float GetTileVisitHeat(int x, int y); // 0 if never visited
+float GetTileVisitHeat(uint32_t map_id, int x, int y); // 0 if never visited
 void  ClearTileHeat();
 
 // Internal: called by DrawCanvas when show_trails is true.
