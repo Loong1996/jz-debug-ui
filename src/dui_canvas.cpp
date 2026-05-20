@@ -237,14 +237,14 @@ void DrawCanvas(World& world, CanvasView* view) {
     // Pause / play toggle
     if (IsWorldPaused()) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.65f, 0.1f, 1.f));
-        if (ImGui::Button(u8"▶")) SetWorldPaused(false);
+        if (ImGui::Button(u8"▶##play")) SetWorldPaused(false);
         ImGui::PopStyleColor();
     } else {
-        if (ImGui::Button(u8"⏸")) SetWorldPaused(true);
+        if (ImGui::Button("||")) SetWorldPaused(true);
     }
     ImGui::SameLine();
     // Single step (only meaningful when paused)
-    if (ImGui::Button(u8"⏯")) RequestSingleStep();
+    if (ImGui::Button("|>")) RequestSingleStep();
     ImGui::SameLine();
     // Speed selector
     {
@@ -268,7 +268,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     const bool in_replay = IsReplayActive();
     if (in_replay) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
-        ImGui::Text(u8"  ⏸ 回放中  第 %d / %d 帧  — 交互已禁用，点「回放」面板的「返回实时」退出",
+        ImGui::Text(u8"  [||] 回放中  第 %d / %d 帧  — 交互已禁用，点「回放」面板的「返回实时」退出",
                     GetReplayCursor() + 1, GetReplayBufferFrames());
         ImGui::PopStyleColor();
     }
@@ -465,7 +465,9 @@ void DrawCanvas(World& world, CanvasView* view) {
     }
 
     // --- 1c. Heatmaps — covers entire viewport, independent of show_cells ---
-    if (view->show_heatmaps)
+    // Suppressed during replay: heatmap callbacks read live game state and cannot
+    // be rewound, so they would show incorrect values against historical positions.
+    if (view->show_heatmaps && !in_replay)
         InvokeCellHeatmaps_(rw, dl, ccx, ccy, static_cast<int>(kViewHalf));
 
     // --- 1d. Entity trails (below entity sprites) ---

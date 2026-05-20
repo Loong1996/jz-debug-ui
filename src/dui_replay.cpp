@@ -111,21 +111,21 @@ void DrawReplayPanel(World& world) {
     // Playback buttons
     static bool s_playing = false;
 
-    if (ImGui::Button(u8"⏮")) { if (!s_replay_active) EnterReplay(); s_cursor = 0; s_playing = false; }
+    if (ImGui::Button("|<<")) { if (!s_replay_active) EnterReplay(); s_cursor = 0; s_playing = false; }
     ImGui::SameLine();
-    if (ImGui::Button(u8"◀"))  { if (!s_replay_active) EnterReplay(); if (s_cursor > 0) --s_cursor; s_playing = false; }
+    if (ImGui::Button(" < "))  { if (!s_replay_active) EnterReplay(); if (s_cursor > 0) --s_cursor; s_playing = false; }
     ImGui::SameLine();
 
     if (s_replay_active && s_playing) {
-        if (ImGui::Button(u8"⏸")) s_playing = false;
+        if (ImGui::Button(" ||")) s_playing = false;
     } else {
-        if (ImGui::Button(u8"▶")) { if (!s_replay_active) EnterReplay(); s_playing = true; }
+        if (ImGui::Button(u8" ▶")) { if (!s_replay_active) EnterReplay(); s_playing = true; }
     }
 
     ImGui::SameLine();
-    if (ImGui::Button(u8"▶|")) { if (!s_replay_active) EnterReplay(); if (s_cursor < s_count-1) ++s_cursor; s_playing = false; }
+    if (ImGui::Button(" > ")) { if (!s_replay_active) EnterReplay(); if (s_cursor < s_count-1) ++s_cursor; s_playing = false; }
     ImGui::SameLine();
-    if (ImGui::Button(u8"⏭"))  { if (!s_replay_active) EnterReplay(); s_cursor = s_count - 1; s_playing = false; }
+    if (ImGui::Button(">>|"))  { if (!s_replay_active) EnterReplay(); s_cursor = s_count - 1; s_playing = false; }
     ImGui::SameLine();
 
     if (!s_replay_active) {
