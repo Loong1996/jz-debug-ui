@@ -33,6 +33,9 @@ add_library(dui STATIC
     src/dui_snapshot.cpp
     src/dui_profiler.cpp
     src/dui_menubar.cpp
+    src/dui_time.cpp
+    src/dui_entity_log.cpp
+    src/dui_replay.cpp
 )
 target_include_directories(dui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src

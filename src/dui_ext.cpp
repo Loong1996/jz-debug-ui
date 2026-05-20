@@ -1,5 +1,6 @@
 #include "dui_ext.h"
 #include "dui_trails.h"
+#include "dui_entity_log.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -533,6 +534,7 @@ bool DespawnEntity(World& w, uint64_t id) {
         SelectRemove(w, id);
         ClearEntityMarker(id);
         ClearTrailsFor(id);
+        OnEntityDespawned_(id);
         return true;
     }
     return false;

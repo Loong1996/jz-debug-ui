@@ -1,6 +1,7 @@
 #include "dui_detail.h"
 #include "dui_ext.h"
 #include "dui_menubar.h"
+#include "dui_entity_log.h"
 #include <imgui.h>
 #include <cstdio>
 #include <unordered_map>
@@ -121,6 +122,26 @@ void DrawEntityDetail(World& world) {
 
             // RegisterEntityDrawer fields
             InvokeEntityDrawer(e);
+
+            // Per-entity log channel
+            {
+                int nlog = 0;
+                const EntityLogEntry* logs = GetEntityLog(e.id, &nlog);
+                if (nlog > 0) {
+                    if (ImGui::CollapsingHeader(u8"日志##elog", ImGuiTreeNodeFlags_DefaultOpen)) {
+                        if (ImGui::BeginChild("##elog_scroll", ImVec2(0, 110.f), ImGuiChildFlags_Borders)) {
+                            for (int li = 0; li < nlog; ++li) {
+                                const EntityLogEntry& le = logs[li];
+                                ImVec4 col = le.level == 2 ? ImVec4(1.f, .4f, .4f, 1.f)
+                                           : le.level == 1 ? ImVec4(1.f, .85f, .3f, 1.f)
+                                                           : ImVec4(.8f, .8f, .8f, 1.f);
+                                ImGui::TextColored(col, "%s  %s", le.ts, le.text);
+                            }
+                        }
+                        ImGui::EndChild();
+                    }
+                }
+            }
 
             // Same-position overlay
             bool has_ov = false;

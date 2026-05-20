@@ -3,6 +3,8 @@
 #include "dui_trails.h"
 #include "dui_pins.h"
 #include "dui_menubar.h"
+#include "dui_time.h"
+#include "dui_replay.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
@@ -98,6 +100,10 @@ CanvasView& GetActiveCanvasView() { return s_default_view; }
 
 void DrawCanvas(World& world, CanvasView* view) {
     if (!view) view = &s_default_view;  // NOLINT — s_default_view defined above
+
+    // Replay: render entity/cell positions from historical snapshot when active.
+    // Interaction (click, right-click) is always on the real `world`.
+    const World& rw = SelectActiveWorld_(world);
 
     // Reset camera when active map changes
     static uint32_t s_last_drawn_map_id = ~0u;
@@ -227,7 +233,45 @@ void DrawCanvas(World& world, CanvasView* view) {
         ImGui::EndPopup();
     }
 
+    ImGui::SameLine(); ImGui::TextDisabled("|"); ImGui::SameLine();
+    // Pause / play toggle
+    if (IsWorldPaused()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.65f, 0.1f, 1.f));
+        if (ImGui::Button(u8"▶")) SetWorldPaused(false);
+        ImGui::PopStyleColor();
+    } else {
+        if (ImGui::Button(u8"⏸")) SetWorldPaused(true);
+    }
+    ImGui::SameLine();
+    // Single step (only meaningful when paused)
+    if (ImGui::Button(u8"⏯")) RequestSingleStep();
+    ImGui::SameLine();
+    // Speed selector
+    {
+        char spdbuf[12];
+        float ts = GetTimeScale();
+        std::snprintf(spdbuf, sizeof(spdbuf), "%.4gx", ts);
+        if (ImGui::Button(spdbuf)) ImGui::OpenPopup("##speed_popup");
+        if (ImGui::BeginPopup("##speed_popup")) {
+            static const float kSpeeds[] = {0.25f, 0.5f, 1.f, 2.f, 4.f};
+            static const char* kLabels[] = {"0.25x", "0.5x", "1x", "2x", "4x"};
+            for (int si = 0; si < 5; ++si)
+                if (ImGui::MenuItem(kLabels[si], nullptr, ts == kSpeeds[si]))
+                    SetTimeScale(kSpeeds[si]);
+            ImGui::EndPopup();
+        }
+    }
+
     ImGui::PopStyleVar();
+
+    // Replay status bar (shown between toolbar and canvas when in replay)
+    const bool in_replay = IsReplayActive();
+    if (in_replay) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.4f, 0.4f, 1.f));
+        ImGui::Text(u8"  ⏸ 回放中  第 %d / %d 帧  — 交互已禁用，点「回放」面板的「返回实时」退出",
+                    GetReplayCursor() + 1, GetReplayBufferFrames());
+        ImGui::PopStyleColor();
+    }
 
     // --- Canvas area ---
     ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -361,17 +405,18 @@ void DrawCanvas(World& world, CanvasView* view) {
     };
 
     // --- Pre-scan hover hits: single pass reused by highlights and tooltip ---
+    // Uses rw so hover highlights match the rendered (possibly historical) positions.
     int hover_wx = 0, hover_wy = 0;
     std::vector<int> hover_entity_idx, hover_cell_idx;
     if (hovered) {
         ToWorld(ImGui::GetIO().MousePos, hover_wx, hover_wy);
-        for (int i = 0; i < static_cast<int>(world.entities.size()); ++i) {
-            const auto& e = world.entities[i];
+        for (int i = 0; i < static_cast<int>(rw.entities.size()); ++i) {
+            const auto& e = rw.entities[i];
             if (e.map_id == world.active_map_id && e.x == hover_wx && e.y == hover_wy)
                 hover_entity_idx.push_back(i);
         }
-        for (int i = 0; i < static_cast<int>(world.cells.size()); ++i) {
-            const auto& c = world.cells[i];
+        for (int i = 0; i < static_cast<int>(rw.cells.size()); ++i) {
+            const auto& c = rw.cells[i];
             if (c.map_id == world.active_map_id && c.x == hover_wx && c.y == hover_wy)
                 hover_cell_idx.push_back(i);
         }
@@ -384,8 +429,8 @@ void DrawCanvas(World& world, CanvasView* view) {
 
     // --- 1. Map cells ---
     if (view->show_cells) {
-        for (int i = 0; i < static_cast<int>(world.cells.size()); ++i) {
-            const auto& c = world.cells[i];
+        for (int i = 0; i < static_cast<int>(rw.cells.size()); ++i) {
+            const auto& c = rw.cells[i];
             if (c.map_id != world.active_map_id) continue;
             ImVec2 pts[4];
             TileDiamond(static_cast<float>(c.x), static_cast<float>(c.y), pts);
@@ -393,21 +438,21 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
         // Hover highlight on hovered cells
         for (int idx : hover_cell_idx) {
-            const auto& c = world.cells[idx];
+            const auto& c = rw.cells[idx];
             ImVec2 pts[4];
             TileDiamond(static_cast<float>(c.x), static_cast<float>(c.y), pts);
             dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(255, 255, 255, 160), 2.f);
         }
 
         // --- 1b. Per-type cell overlays ---
-        for (const auto& c : world.cells) {
+        for (const auto& c : rw.cells) {
             if (c.map_id != world.active_map_id) continue;
-            InvokeCellOverlays_(world, c, dl);
+            InvokeCellOverlays_(rw, c, dl);
         }
 
         // --- 1c. Cell labels (only when zoomed in enough) ---
         if (view->show_labels && th >= 12.f) {
-            for (const auto& c : world.cells) {
+            for (const auto& c : rw.cells) {
                 if (c.map_id != world.active_map_id) continue;
                 std::string lbl = InvokeCellLabel(c);
                 if (lbl.empty()) continue;
@@ -421,10 +466,10 @@ void DrawCanvas(World& world, CanvasView* view) {
 
     // --- 1c. Heatmaps — covers entire viewport, independent of show_cells ---
     if (view->show_heatmaps)
-        InvokeCellHeatmaps_(world, dl, ccx, ccy, static_cast<int>(kViewHalf));
+        InvokeCellHeatmaps_(rw, dl, ccx, ccy, static_cast<int>(kViewHalf));
 
     // --- 1d. Entity trails (below entity sprites) ---
-    if (view->show_trails && IsEntityTrailsEnabled()) InvokeTrails_(world, dl);
+    if (view->show_trails && IsEntityTrailsEnabled()) InvokeTrails_(rw, dl);
 
     // --- 2. Grid lines ---
     if (view->show_grid) {
@@ -470,8 +515,8 @@ void DrawCanvas(World& world, CanvasView* view) {
 
     // --- 4. Entities ---
     if (view->show_ents) {
-        for (int i = 0; i < static_cast<int>(world.entities.size()); ++i) {
-            const auto& e = world.entities[i];
+        for (int i = 0; i < static_cast<int>(rw.entities.size()); ++i) {
+            const auto& e = rw.entities[i];
             if (e.map_id != world.active_map_id) continue;
             ImVec2 pts[4];
             TileDiamond(e.fx, e.fy, pts);
@@ -541,18 +586,18 @@ void DrawCanvas(World& world, CanvasView* view) {
 
     // --- 5b. Entity + global overlays ---
     if (view->show_ents) {
-        for (const auto& e : world.entities) {
+        for (const auto& e : rw.entities) {
             if (e.map_id != world.active_map_id) continue;
-            InvokeEntityOverlays_(world, e, dl);
+            InvokeEntityOverlays_(rw, e, dl);
         }
     }
-    InvokeGlobalOverlays_(world, dl);
+    InvokeGlobalOverlays_(rw, dl);
     DrawPinsOverlay_(world, dl);
 
     // --- 5c. Entity links and cell links ---
     if (view->show_links) {
-        InvokeEntityLinks_(world, dl);
-        InvokeCellLinks_  (world, dl);
+        InvokeEntityLinks_(rw, dl);
+        InvokeCellLinks_  (rw, dl);
     }
 
     // --- 6. Axis indicator ---
@@ -576,6 +621,16 @@ void DrawCanvas(World& world, CanvasView* view) {
         fg->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.5f,
                     ImVec2(p0.x + 8.f, p0.y + 8.f),
                     IM_COL32(200, 200, 220, 77), buf);
+        // Replay watermark
+        if (in_replay) {
+            char rbuf[32];
+            std::snprintf(rbuf, sizeof(rbuf), u8"REPLAY  %d/%d",
+                          GetReplayCursor() + 1, GetReplayBufferFrames());
+            float rw_tw = ImGui::CalcTextSize(rbuf).x;
+            fg->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 1.2f,
+                        ImVec2(p0.x + sz.x - rw_tw - 10.f, p0.y + 8.f),
+                        IM_COL32(255, 80, 80, 200), rbuf);
+        }
     }
 
     // --- Cursor world coordinate HUD ---
@@ -596,7 +651,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     static int    s_popup_nhits     = 0, s_popup_nskipped = 0;
     static Hit    s_popup_hits[32];
 
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    if (!in_replay && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
         bool mod = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift;
@@ -742,7 +797,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     static int    s_ctx_nhits = 0;
     static float  s_ctx_wx = 0.f, s_ctx_wy = 0.f;
 
-    if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+    if (!in_replay && hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
         ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
         if (drag.x * drag.x + drag.y * drag.y < 36.f) {
             int cwx, cwy;
@@ -804,14 +859,14 @@ void DrawCanvas(World& world, CanvasView* view) {
         ImGui::Text("(%d, %d)", hover_wx, hover_wy);
         ImGui::Separator();
         for (int idx : hover_entity_idx) {
-            const auto& e  = world.entities[idx];
+            const auto& e  = rw.entities[idx];
             const char* tn = GetEntityTypeName(e.type);
             char        tbuf[16];
             if (!tn) { std::snprintf(tbuf, sizeof(tbuf), "%u", static_cast<unsigned>(e.type)); tn = tbuf; }
             ImGui::Text(u8"[E %s] %s", tn, e.label);
         }
         for (int idx : hover_cell_idx) {
-            const auto& c  = world.cells[idx];
+            const auto& c  = rw.cells[idx];
             const char* tn = GetCellTypeName(c.type);
             char        tbuf[16];
             if (!tn) { std::snprintf(tbuf, sizeof(tbuf), "%u", static_cast<unsigned>(c.type)); tn = tbuf; }

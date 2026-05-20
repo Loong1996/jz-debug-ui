@@ -11,6 +11,9 @@
 #include "dui_pins.h"
 #include "dui_snapshot.h"
 #include "dui_profiler.h"
+#include "dui_time.h"
+#include "dui_entity_log.h"
+#include "dui_replay.h"
 #include <imgui.h>
 #include <chrono>
 #include <cmath>
@@ -200,6 +203,19 @@ void SetupRegistrations(World& world) {
     BindHotkey(ImGuiKey_F6, 0, u8"World/保存快照…");
     BindHotkey(ImGuiKey_F7, 0, u8"World/加载快照…");
 
+    // Time-control commands + hotkeys
+    RegisterCommand(u8"World/暂停",  [] { ToggleWorldPaused(); });
+    RegisterCommand(u8"World/单帧",  [] { RequestSingleStep(); });
+    RegisterCommand(u8"World/速度-", [] { SetTimeScale(GetTimeScale() / 2.f); });
+    RegisterCommand(u8"World/速度+", [] { SetTimeScale(GetTimeScale() * 2.f); });
+    RegisterCommand(u8"World/开启录制", [] { EnableReplayRecording(!IsReplayRecording()); });
+
+    BindHotkey(ImGuiKey_Space,        0, u8"World/暂停");
+    BindHotkey(ImGuiKey_Period,       0, u8"World/单帧");
+    BindHotkey(ImGuiKey_LeftBracket,  0, u8"World/速度-");
+    BindHotkey(ImGuiKey_RightBracket, 0, u8"World/速度+");
+    BindHotkey(ImGuiKey_F8,           0, u8"World/开启录制");
+
     // Metric configuration — store handles for zero-lookup Push
     s_m_ai_ms    = ConfigureMetric("ai/decision_ms", { "ms" });
     s_m_ai_nodes = ConfigureMetric("ai/path_nodes",  { "nodes", 0.f, 30.f });
@@ -271,9 +287,28 @@ void SetupRegistrations(World& world) {
 void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
     using Clock = std::chrono::steady_clock;
     auto t0 = Clock::now();
-    { DUI_PROFILE_SCOPE("tick/mock_world");    TickMockWorld(world, dt); }
+    { DUI_PROFILE_SCOPE("tick/mock_world");    TickMockWorld(world, EffectiveDt(dt)); }
     { DUI_PROFILE_SCOPE("tick/trails");        RecordTrailSnapshot(world); }
     { DUI_PROFILE_SCOPE("tick/tile_visits");   AccumulateTileVisits(world); }
+
+    // Demo: per-entity log channel — occasionally log AI events for warriors
+    static float s_elog_acc = 0.f;
+    static int   s_target_cycle = 0;
+    s_elog_acc += dt;
+    if (s_elog_acc >= 1.5f) {
+        s_elog_acc = 0.f;
+        for (const auto& e : world.entities) {
+            if (e.type != 1 || e.map_id != world.active_map_id) continue;
+            const char* events[] = {
+                u8"切换目标 #1000", u8"开始追击", u8"路径重规划",
+                u8"进入攻击范围", u8"切换巡逻"
+            };
+            int ridx = static_cast<int>(e.id + s_target_cycle) % 5;
+            if (ridx % 2 == 0) LogEntity(e.id, "%s", events[ridx]);
+            else                LogEntityWarn(e.id, "%s", events[ridx]);
+            ++s_target_cycle;
+        }
+    }
     metrics.tick_ms.push(
         std::chrono::duration<float>(Clock::now() - t0).count() * 1000.f);
     metrics.entity_count.push(static_cast<float>(world.entities.size()));

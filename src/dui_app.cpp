@@ -228,6 +228,7 @@ void App::ApplyBuiltinLayout(ImGuiID dsid) {
     ImGui::DockBuilderDockWindow(u8"命令",     bot);
     ImGui::DockBuilderDockWindow(u8"事件",     bot);
     ImGui::DockBuilderDockWindow("Profiler",   bot);
+    ImGui::DockBuilderDockWindow(u8"回放",     bot);
     DockUserPanels_(mid, lft, rgt, bot);
     ImGui::DockBuilderFinish(dsid);
 }

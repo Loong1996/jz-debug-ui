@@ -10,10 +10,12 @@
 #include "dui_search.h"
 #include "dui_profiler.h"
 #include "dui_menubar.h"
+#include "dui_replay.h"
 
 namespace dui {
 
 void DrawAll(World& world, Metrics& metrics) {
+    CaptureReplayFrame_(world);
     DrawMenuBar();
     DrawInspector(world);
     DrawCanvas(world);
@@ -26,6 +28,7 @@ void DrawAll(World& world, Metrics& metrics) {
     InvokeUserPanels_();
     DrawGlobalSearch(world);
     DrawProfiler();
+    DrawReplayPanel(world);
 }
 
 } // namespace dui
