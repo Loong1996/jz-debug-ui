@@ -144,11 +144,6 @@ void DrawEntityDetail(World& world) {
                 }
             }
 
-            // Live editor
-            if (g_entity_editors.count(e.type) > 0) {
-                ImGui::Spacing();
-                if (ImGui::CollapsingHeader(u8"编辑##eedit")) InvokeEntityEditor_(e);
-            }
             ImGui::PopID();
 
             // Registered detail text
@@ -158,6 +153,16 @@ void DrawEntityDetail(World& world) {
                 if (ImGui::BeginChild("##ent_detail", ImVec2(0, 160.f), ImGuiChildFlags_Borders))
                     ImGui::TextUnformatted(text.c_str(), text.c_str() + text.size());
                 ImGui::EndChild();
+            }
+
+            // Live editor — at the bottom so it doesn't push detail text out of view
+            if (g_entity_editors.count(e.type) > 0) {
+                ImGui::Spacing();
+                if (ImGui::CollapsingHeader(u8"编辑##eedit")) {
+                    ImGui::PushID(static_cast<int>(e.id));
+                    InvokeEntityEditor_(e);
+                    ImGui::PopID();
+                }
             }
         }
     }
