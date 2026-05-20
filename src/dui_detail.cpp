@@ -1,6 +1,8 @@
 #include "dui_detail.h"
+#include "dui_ext.h"
 #include "dui_menubar.h"
 #include <imgui.h>
+#include <cstdio>
 #include <unordered_map>
 
 namespace {
@@ -35,8 +37,6 @@ std::string InvokeEntityDetailText(const Entity& e) {
     return {};
 }
 
-// ---- Cell detail text ----
-
 void RegisterCellDetailText(uint8_t type, CellDetailTextFn fn) {
     g_cell_builder_fns.erase(type);
     g_cell_text_fns[type] = std::move(fn);
@@ -65,8 +65,6 @@ bool InvokeCellDetailText_(const Cell& c) {
     return true;
 }
 
-// ---- Entity/cell editors ----
-
 void RegisterEntityEditor(uint8_t type, EntityEditFn fn) {
     g_entity_editors[type] = std::move(fn);
 }
@@ -87,52 +85,153 @@ bool InvokeCellEditor_(Cell& c) {
     return true;
 }
 
-// ---- DrawEntityDetail ----
+// ---- DrawEntityDetail -------------------------------------------------------
+// Unified "current selection" panel: selected entity (top) + selected cell (bottom).
 
 void DrawEntityDetail(World& world) {
     if (!ImGui::Begin(u8"实体详情", &BuiltinPanelOpenRef(u8"实体详情")))
         { ImGui::End(); return; }
 
-    if (world.selected_id == 0) {
-        ImGui::TextDisabled(u8"(未选中实体)");
-        ImGui::End();
-        return;
-    }
+    bool anything_shown = false;
 
-    Entity* found = nullptr;
-    for (auto& e : world.entities)
-        if (e.id == world.selected_id && e.map_id == world.active_map_id) { found = &e; break; }
+    // ---- Selected entity ----
+    if (world.selected_id != 0) {
+        Entity* found = nullptr;
+        for (auto& e : world.entities)
+            if (e.id == world.selected_id && e.map_id == world.active_map_id)
+                { found = &e; break; }
 
-    if (!found) {
-        ImGui::TextDisabled(u8"(未选中实体)");
-        ImGui::End();
-        return;
-    }
+        if (found) {
+            anything_shown = true;
+            Entity& e = *found;
 
-    Entity& e = *found;
-    ImGui::Text("ID    : %llu", static_cast<unsigned long long>(e.id));
-    ImGui::Text(u8"Type  : %u  Label : %s", static_cast<unsigned>(e.type), e.label);
-    ImGui::Text(u8"Pos   : (%d, %d)  fxy : (%.2f, %.2f)", e.x, e.y, e.fx, e.fy);
-    ImGui::Text(u8"Radius: %.2f", e.radius);
+            // Tinted header
+            const char* etn = GetEntityTypeName(e.type);
+            char hdr[80];
+            if (etn) std::snprintf(hdr, sizeof(hdr), u8"实体 — %s  [%s]", e.label, etn);
+            else     std::snprintf(hdr, sizeof(hdr), u8"实体 — %s  [type %u]", e.label, static_cast<unsigned>(e.type));
+            ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.f, 1.f), "%s", hdr);
+            ImGui::Separator();
 
-    // Live editor (RegisterEntityEditor) — placed before the scrollable detail body.
-    if (g_entity_editors.count(e.type) > 0) {
-        if (ImGui::CollapsingHeader(u8"编辑##edit_section")) {
+            // Basic info
             ImGui::PushID(static_cast<int>(e.id));
-            InvokeEntityEditor_(e);
+            ImGui::Text("ID     : %llu", static_cast<unsigned long long>(e.id));
+            ImGui::Text(u8"Pos    : (%d, %d)  fxy (%.2f, %.2f)", e.x, e.y, e.fx, e.fy);
+            ImGui::Text(u8"Radius : %.2f", e.radius);
+
+            // RegisterEntityDrawer fields
+            InvokeEntityDrawer(e);
+
+            // Same-position overlay
+            bool has_ov = false;
+            for (const auto& oe : world.entities) {
+                if (oe.id == e.id || oe.map_id != world.active_map_id) continue;
+                if (oe.x == e.x && oe.y == e.y) { has_ov = true; break; }
+            }
+            if (has_ov) {
+                ImGui::Spacing();
+                ImGui::TextDisabled(u8"▸ 同坐标其他实体");
+                for (auto& oe : world.entities) {
+                    if (oe.id == e.id || oe.map_id != world.active_map_id) continue;
+                    if (oe.x != e.x || oe.y != e.y) continue;
+                    ImGui::PushID(static_cast<int>(oe.id));
+                    char buf[64];
+                    const char* otn = GetEntityTypeName(oe.type);
+                    if (otn) std::snprintf(buf, sizeof(buf), "  [%s] %s", otn, oe.label);
+                    else     std::snprintf(buf, sizeof(buf), u8"  [type %u] %s", static_cast<unsigned>(oe.type), oe.label);
+                    if (ImGui::Selectable(buf)) { SelectClear(world); SelectAdd(world, oe.id); }
+                    ImGui::PopID();
+                }
+            }
+
+            // Live editor
+            if (g_entity_editors.count(e.type) > 0) {
+                ImGui::Spacing();
+                if (ImGui::CollapsingHeader(u8"编辑##eedit")) InvokeEntityEditor_(e);
+            }
             ImGui::PopID();
+
+            // Registered detail text
+            std::string text = InvokeEntityDetailText(e);
+            if (!text.empty()) {
+                ImGui::Spacing();
+                if (ImGui::BeginChild("##ent_detail", ImVec2(0, 160.f), ImGuiChildFlags_Borders))
+                    ImGui::TextUnformatted(text.c_str(), text.c_str() + text.size());
+                ImGui::EndChild();
+            }
         }
     }
-    ImGui::Separator();
 
-    std::string text = InvokeEntityDetailText(e);
-    if (ImGui::BeginChild("##detail_body", ImVec2(0, 0), ImGuiChildFlags_Borders)) {
-        if (!text.empty())
-            ImGui::TextUnformatted(text.c_str(), text.c_str() + text.size());
-        else
-            ImGui::TextDisabled(u8"(无扩展详情，调用 RegisterEntityDetailText 后显示)");
+    // ---- Selected cell ----
+    if (world.sel_cell_valid) {
+        if (anything_shown) { ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing(); }
+        anything_shown = true;
+
+        char cell_hdr[48];
+        std::snprintf(cell_hdr, sizeof(cell_hdr),
+            u8"格子 (%d, %d)", world.sel_cell_x, world.sel_cell_y);
+        ImGui::TextColored(ImVec4(0.75f, 1.f, 0.55f, 1.f), "%s", cell_hdr);
+        ImGui::Separator();
+
+        int n = 0;
+        for (auto& c : world.cells) {
+            if (c.map_id != world.active_map_id) continue;
+            if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
+            ImGui::PushID(n);
+            const char* ctn = GetCellTypeName(c.type); char cnfb[16];
+            if (!ctn) { std::snprintf(cnfb, sizeof(cnfb), "%d", c.type); ctn = cnfb; }
+            char chdr[64];
+            std::snprintf(chdr, sizeof(chdr), "[%s] %s##csc%d", ctn, c.label, n);
+            ImVec4 ch4 = ImGui::ColorConvertU32ToFloat4(c.color);
+            ch4.w = 0.55f; ImGui::PushStyleColor(ImGuiCol_Header,        ImGui::ColorConvertFloat4ToU32(ch4));
+            ch4.w = 0.70f; ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::ColorConvertFloat4ToU32(ch4));
+            ch4.w = 0.85f; ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImGui::ColorConvertFloat4ToU32(ch4));
+            if (ImGui::CollapsingHeader(chdr, ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Text(u8"坐标: (%d, %d)", c.x, c.y);
+                InvokeCellDrawer(c);
+                std::string ctext = InvokeCellDetailText(c);
+                if (!ctext.empty()) {
+                    ImGui::Separator();
+                    ImGui::TextUnformatted(ctext.c_str(), ctext.c_str() + ctext.size());
+                }
+                if (g_cell_editors.count(c.type) > 0 &&
+                    ImGui::CollapsingHeader(u8"编辑##cedit")) InvokeCellEditor_(c);
+            }
+            ImGui::PopStyleColor(3);
+            ImGui::PopID();
+            ++n;
+        }
+        if (n == 0) ImGui::TextDisabled(u8"(此位置无格子)");
+
+        // Entities sitting on this cell
+        bool any_ent = false;
+        for (const auto& e : world.entities)
+            if (e.map_id == world.active_map_id &&
+                e.x == world.sel_cell_x && e.y == world.sel_cell_y)
+                { any_ent = true; break; }
+        if (any_ent) {
+            ImGui::Spacing();
+            ImGui::TextDisabled(u8"▸ 压在此格的实体");
+            for (auto& e : world.entities) {
+                if (e.map_id != world.active_map_id) continue;
+                if (e.x != world.sel_cell_x || e.y != world.sel_cell_y) continue;
+                bool is_sel = IsSelected(world, e.id);
+                ImGui::PushID(static_cast<int>(e.id));
+                char buf[64];
+                const char* etn = GetEntityTypeName(e.type);
+                if (etn) std::snprintf(buf, sizeof(buf), "  [%s] %s", etn, e.label);
+                else     std::snprintf(buf, sizeof(buf), u8"  [type %u] %s", static_cast<unsigned>(e.type), e.label);
+                if (ImGui::Selectable(buf, is_sel)) {
+                    if (is_sel) SelectClear(world);
+                    else { SelectClear(world); SelectAdd(world, e.id); }
+                }
+                ImGui::PopID();
+            }
+        }
     }
-    ImGui::EndChild();
+
+    if (!anything_shown)
+        ImGui::TextDisabled(u8"(未选中任何实体或格子)");
 
     ImGui::End();
 }
