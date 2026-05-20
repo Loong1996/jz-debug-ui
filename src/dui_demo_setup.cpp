@@ -259,16 +259,12 @@ void SetupRegistrations(World& world) {
     RegisterCommand(u8"Selection/清除选择", [wp] { SelectClear(*wp); });
 
     RegisterCommand(u8"Selection/选中实体染红", [wp] {
-        for (auto id : wp->selected_ids)
-            for (auto& e : wp->entities)
-                if (e.id == id) { e.SetColor(220, 60, 60); break; }
+        ForEachSelected(*wp, [](Entity& e) { e.SetColor(220, 60, 60); });
         Log(u8"colored %d entities", static_cast<int>(wp->selected_ids.size()));
     });
 
     RegisterCommand(u8"Selection/选中实体传送到原点", [wp] {
-        for (auto id : wp->selected_ids)
-            for (auto& e : wp->entities)
-                if (e.id == id) { e.SetPos(0.f, 0.f).SetVel(0.f, 0.f); break; }
+        ForEachSelected(*wp, [](Entity& e) { e.SetPos(0.f, 0.f).SetVel(0.f, 0.f); });
     });
 }
 

@@ -301,4 +301,14 @@ void SelectToggle(World& w, uint64_t id);
 void SelectClear (World& w);
 bool IsSelected  (const World& w, uint64_t id);
 
+// Iterate over every selected entity on the active map and call fn.
+// Handles the id→entity lookup internally — no double loop needed.
+void ForEachSelected     (World& w,       std::function<void(Entity&)>       fn);
+void ForEachSelected     (const World& w, std::function<void(const Entity&)> fn);
+
+// Iterate over every cell at the selected cell position (sel_cell_valid must be true).
+// No-op if no cell is selected.
+void ForEachSelectedCell (World& w,       std::function<void(Cell&)>         fn);
+void ForEachSelectedCell (const World& w, std::function<void(const Cell&)>   fn);
+
 } // namespace dui

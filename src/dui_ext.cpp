@@ -427,6 +427,32 @@ void SelectClear(World& w) {
     w.selected_id = 0;
 }
 
+void ForEachSelected(World& w, std::function<void(Entity&)> fn) {
+    for (uint64_t id : w.selected_ids)
+        for (auto& e : w.entities)
+            if (e.id == id && e.map_id == w.active_map_id) { fn(e); break; }
+}
+
+void ForEachSelected(const World& w, std::function<void(const Entity&)> fn) {
+    for (uint64_t id : w.selected_ids)
+        for (const auto& e : w.entities)
+            if (e.id == id && e.map_id == w.active_map_id) { fn(e); break; }
+}
+
+void ForEachSelectedCell(World& w, std::function<void(Cell&)> fn) {
+    if (!w.sel_cell_valid) return;
+    for (auto& c : w.cells)
+        if (c.map_id == w.active_map_id && c.x == w.sel_cell_x && c.y == w.sel_cell_y)
+            fn(c);
+}
+
+void ForEachSelectedCell(const World& w, std::function<void(const Cell&)> fn) {
+    if (!w.sel_cell_valid) return;
+    for (const auto& c : w.cells)
+        if (c.map_id == w.active_map_id && c.x == w.sel_cell_x && c.y == w.sel_cell_y)
+            fn(c);
+}
+
 // ---- Cell Links ----
 
 void RegisterCellLinks(const char* name, CellLinksFn fn) {
