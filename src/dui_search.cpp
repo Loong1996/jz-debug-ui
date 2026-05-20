@@ -2,6 +2,8 @@
 #include "dui_commands.h"
 #include "dui_hotkeys.h"
 #include "dui_ext.h"
+#include "dui_pins.h"
+#include "dui_canvas.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cctype>
@@ -18,12 +20,15 @@ static char s_query[128] = {};
 static int  s_sel   = 0;
 
 struct SearchResult {
-    enum Kind { KEntity, KCmd, KCmdArgs } kind;
-    int         entity_idx = -1;
-    int         cmd_index  = -1;
-    int         score      = 0;
+    enum Kind { KEntity, KCell, KPin, KBookmark, KCmd, KCmdArgs } kind;
+    int         entity_idx    = -1;
+    int         cell_idx      = -1;
+    uint64_t    pin_id        = 0;
+    std::string bookmark_name;
+    int         cmd_index     = -1;
+    int         score         = 0;
     std::string display;
-    std::string name;   // for command execution / entity selection
+    std::string name; // command execution
 };
 
 static std::vector<SearchResult> s_results;
@@ -105,6 +110,82 @@ static void rebuild(World& world) {
         s_results.push_back(std::move(r));
     }
 
+    // Cells
+    for (int i = 0; i < static_cast<int>(world.cells.size()); ++i) {
+        const Cell& c = world.cells[i];
+        int sc = 0;
+        if (!q.empty()) {
+            char coord_buf[32];
+            std::snprintf(coord_buf, sizeof(coord_buf), "%d,%d", c.x, c.y);
+            if (score_substr(coord_buf, q)) sc = std::max(sc, 8);
+            if (c.label[0] && score_substr(c.label, q)) sc = std::max(sc, 9);
+            const char* tn = GetCellTypeName(c.type);
+            if (tn && score_substr(tn, q)) sc = std::max(sc, 4);
+            const char* mn = GetMapName(c.map_id);
+            if (mn && score_substr(mn, q)) sc = std::max(sc, 2);
+        } else {
+            sc = 1;
+        }
+        if (sc == 0) continue;
+        const char* tn = GetCellTypeName(c.type);
+        const char* mn = GetMapName(c.map_id);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), u8"[CELL] (%d,%d) %s '%s' @ %s",
+            c.x, c.y, tn ? tn : "?", c.label, mn ? mn : "?");
+        SearchResult r;
+        r.kind     = SearchResult::KCell;
+        r.cell_idx = i;
+        r.score    = sc;
+        r.display  = buf;
+        s_results.push_back(std::move(r));
+    }
+
+    // Pins
+    for (const auto& pin : ListPins()) {
+        int sc = 0;
+        if (!q.empty()) {
+            if (!pin.text.empty() && score_substr(pin.text, q)) sc = std::max(sc, 9);
+            const char* mn = GetMapName(pin.map_id);
+            if (mn && score_substr(mn, q)) sc = std::max(sc, 3);
+        } else {
+            sc = 1;
+        }
+        if (sc == 0) continue;
+        const char* mn = GetMapName(pin.map_id);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), u8"[PIN] %.1f,%.1f  \"%s\"  @ %s",
+            pin.wx, pin.wy, pin.text.c_str(), mn ? mn : "?");
+        SearchResult r;
+        r.kind    = SearchResult::KPin;
+        r.pin_id  = pin.id;
+        r.score   = sc;
+        r.display = buf;
+        s_results.push_back(std::move(r));
+    }
+
+    // Camera bookmarks
+    for (const auto& bk : ListCameraBookmarks()) {
+        int sc = 0;
+        if (!q.empty()) {
+            if (score_substr(bk.name, q)) sc = std::max(sc, 9);
+            const char* mn = GetMapName(bk.map_id);
+            if (mn && score_substr(mn, q)) sc = std::max(sc, 3);
+        } else {
+            sc = 1;
+        }
+        if (sc == 0) continue;
+        const char* mn = GetMapName(bk.map_id);
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), u8"[BMK] %s  (%.0f,%.0f)  @ %s",
+            bk.name.c_str(), bk.cam_x, bk.cam_y, mn ? mn : "?");
+        SearchResult r;
+        r.kind          = SearchResult::KBookmark;
+        r.bookmark_name = bk.name;
+        r.score         = sc;
+        r.display       = buf;
+        s_results.push_back(std::move(r));
+    }
+
     // Sort: higher score first, then stable by insertion order
     std::stable_sort(s_results.begin(), s_results.end(),
         [](const SearchResult& a, const SearchResult& b) { return a.score > b.score; });
@@ -127,6 +208,34 @@ static void activate(World& world) {
         SelectAdd(world, e.id);
         break;
     }
+    case SearchResult::KCell: {
+        const Cell& c = world.cells[r.cell_idx];
+        if (c.map_id != world.active_map_id)
+            SwitchActiveMap(world, c.map_id);
+        world.sel_cell_valid = true;
+        world.sel_cell_x     = c.x;
+        world.sel_cell_y     = c.y;
+        CanvasView& v = GetActiveCanvasView();
+        v.cam_x = static_cast<float>(c.x);
+        v.cam_y = static_cast<float>(c.y);
+        v.follow_player = false;
+        break;
+    }
+    case SearchResult::KPin: {
+        for (const auto& pin : ListPins()) {
+            if (pin.id != r.pin_id) continue;
+            if (pin.map_id != world.active_map_id)
+                SwitchActiveMap(world, pin.map_id);
+            CanvasView& v = GetActiveCanvasView();
+            v.cam_x = pin.wx; v.cam_y = pin.wy;
+            v.follow_player = false;
+            break;
+        }
+        break;
+    }
+    case SearchResult::KBookmark:
+        GotoCameraBookmark(r.bookmark_name.c_str(), world);
+        break;
     case SearchResult::KCmd:
         ExecuteCommand(r.name.c_str());
         break;
@@ -142,13 +251,14 @@ static void activate(World& world) {
 void DrawGlobalSearch(World& world) {
     ImGuiIO& io = ImGui::GetIO();
 
-    // Open on Ctrl+P
+    // Open on Ctrl+P or Ctrl+F
     if (!io.WantTextInput && io.KeyCtrl &&
-        ImGui::IsKeyPressed(ImGuiKey_P, false)) {
-        s_open       = true;
+        (ImGui::IsKeyPressed(ImGuiKey_P, false) ||
+         ImGui::IsKeyPressed(ImGuiKey_F, false))) {
+        s_open        = true;
         s_just_opened = true;
-        s_query[0]   = '\0';
-        s_sel        = 0;
+        s_query[0]    = '\0';
+        s_sel         = 0;
         rebuild(world);
     }
 

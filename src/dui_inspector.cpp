@@ -7,9 +7,103 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
+#include <map>
+#include <string>
 #include <vector>
 
 namespace dui {
+
+// ---- Inspector filter presets -----------------------------------------------
+namespace {
+
+static const char* kPresetsPath = "dui_inspector_presets.ini";
+
+struct FilterPreset {
+    char search[64] = {};
+    int  type_filter   = -1;
+    int  sort_mode     = 0;
+    bool group_by_type = false;
+};
+
+static std::map<std::string, FilterPreset> s_entity_presets;
+static bool s_presets_loaded = false;
+
+static void LoadPresets() {
+    s_entity_presets.clear();
+    FILE* f = std::fopen(kPresetsPath, "r");
+    if (!f) return;
+    char line[256];
+    while (std::fgets(line, sizeof(line), f)) {
+        if (std::strncmp(line, "preset ", 7) != 0) continue;
+        FilterPreset p;
+        char name[64] = {}, srch[64] = {};
+        int  tf = -1, sm = 0, grp = 0;
+        // format: preset name=<name> search=<srch> type=<tf> sort=<sm> group=<grp>
+        const char* np = std::strstr(line, "name=");
+        if (!np) continue;
+        np += 5;
+        int ni = 0;
+        while (*np && *np != ' ' && *np != '\n' && ni < 63) name[ni++] = *np++;
+        name[ni] = '\0';
+        const char* sp = std::strstr(line, "search=");
+        if (sp) {
+            sp += 7;
+            int si = 0;
+            // search value is URL-encoded: spaces as %20
+            while (*sp && *sp != ' ' && *sp != '\n' && si < 63) {
+                if (sp[0] == '%' && sp[1] && sp[2]) {
+                    char hex[3] = { sp[1], sp[2], '\0' };
+                    srch[si++] = static_cast<char>(std::strtol(hex, nullptr, 16));
+                    sp += 3;
+                } else {
+                    srch[si++] = *sp++;
+                }
+            }
+            srch[si] = '\0';
+        }
+        const char* tp = std::strstr(line, "type=");
+        if (tp) tf = std::atoi(tp + 5);
+        const char* smp = std::strstr(line, "sort=");
+        if (smp) sm = std::atoi(smp + 5);
+        const char* gp = std::strstr(line, "group=");
+        if (gp) grp = std::atoi(gp + 6);
+        std::strncpy(p.search, srch, sizeof(p.search) - 1);
+        p.type_filter   = tf;
+        p.sort_mode     = sm;
+        p.group_by_type = grp != 0;
+        s_entity_presets[name] = p;
+    }
+    std::fclose(f);
+}
+
+static void SavePresets() {
+    FILE* f = std::fopen(kPresetsPath, "w");
+    if (!f) return;
+    for (const auto& kv : s_entity_presets) {
+        // URL-encode spaces in search string.
+        char enc[192] = {};
+        int ei = 0;
+        for (char c : kv.second.search) {
+            if (c == '\0') break;
+            if (c == ' ')  { enc[ei++]='%'; enc[ei++]='2'; enc[ei++]='0'; }
+            else           { enc[ei++] = c; }
+        }
+        enc[ei] = '\0';
+        std::fprintf(f, "preset name=%s search=%s type=%d sort=%d group=%d\n",
+            kv.first.c_str(), enc,
+            kv.second.type_filter, kv.second.sort_mode,
+            kv.second.group_by_type ? 1 : 0);
+    }
+    std::fclose(f);
+}
+
+// Current entity filter state — lifted to file scope so presets can read/write it.
+static char s_ent_search[64]   = {};
+static int  s_ent_type_filter  = -1;
+static int  s_ent_sort_mode    = 0;
+static bool s_ent_group        = false;
+
+} // anonymous namespace
 
 // ---- Entity table -----------------------------------------------------------
 static void EntityTableImpl(World& world, const std::vector<int>& idxs,
@@ -95,10 +189,14 @@ static void CellTableImpl(World& world, const std::vector<int>& idxs,
 
 // ---- Entity list tab --------------------------------------------------------
 static void draw_entity_list_tab(World& world) {
-    static char search[64]    = {};
-    static int  type_filter   = -1;
-    static int  sort_mode     = 0;
-    static bool group_by_type = false;
+    // Use file-scope filter state so preset save/load can access it.
+    char (&search)[64]  = s_ent_search;
+    int  &type_filter   = s_ent_type_filter;
+    int  &sort_mode     = s_ent_sort_mode;
+    bool &group_by_type = s_ent_group;
+
+    // Lazy-load presets on first call.
+    if (!s_presets_loaded) { LoadPresets(); s_presets_loaded = true; }
 
     int types[32]; int ntypes = 0;
     for (const auto& e : world.entities) {
@@ -173,6 +271,50 @@ static void draw_entity_list_tab(World& world) {
     const char* sorts[] = { u8"默认","ID","Type",u8"名称",u8"距主角" };
     ImGui::Combo("##esort", &sort_mode, sorts, IM_ARRAYSIZE(sorts));
     ImGui::SameLine(); ImGui::Checkbox(u8"分组", &group_by_type);
+
+    // Preset save/load popup
+    ImGui::SameLine();
+    if (ImGui::Button(u8"★")) ImGui::OpenPopup("##filter_presets");
+    if (ImGui::BeginPopup("##filter_presets")) {
+        ImGui::TextDisabled(u8"过滤器收藏");
+        ImGui::Separator();
+        // List saved presets
+        for (auto& kv : s_entity_presets) {
+            if (ImGui::MenuItem(kv.first.c_str())) {
+                std::strncpy(search, kv.second.search, sizeof(search) - 1);
+                type_filter   = kv.second.type_filter;
+                sort_mode     = kv.second.sort_mode;
+                group_by_type = kv.second.group_by_type;
+            }
+            ImGui::SameLine(200.f);
+            ImGui::PushID(kv.first.c_str());
+            if (ImGui::SmallButton(u8"×")) {
+                s_entity_presets.erase(kv.first);
+                SavePresets();
+                ImGui::PopID();
+                break; // iterator invalidated
+            }
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+        // Save current as new preset
+        static char s_save_name[48] = {};
+        ImGui::SetNextItemWidth(120.f);
+        ImGui::InputTextWithHint("##prname", u8"新名称…", s_save_name, sizeof(s_save_name));
+        ImGui::SameLine();
+        if (ImGui::Button(u8"保存") && s_save_name[0]) {
+            FilterPreset p;
+            std::strncpy(p.search, search, sizeof(p.search) - 1);
+            p.type_filter   = type_filter;
+            p.sort_mode     = sort_mode;
+            p.group_by_type = group_by_type;
+            s_entity_presets[s_save_name] = p;
+            SavePresets();
+            s_save_name[0] = '\0';
+        }
+        ImGui::EndPopup();
+    }
+
     { char cnt[32]; std::snprintf(cnt, sizeof(cnt), "%d/%d",
           static_cast<int>(idx.size()), static_cast<int>(world.entities.size()));
       float cw = ImGui::CalcTextSize(cnt).x + 4.f;

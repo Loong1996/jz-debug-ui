@@ -14,6 +14,7 @@
 #include "dui_time.h"
 #include "dui_entity_log.h"
 #include "dui_replay.h"
+#include "dui_select_group.h"
 #include <imgui.h>
 #include <chrono>
 #include <cmath>
@@ -215,6 +216,22 @@ void SetupRegistrations(World& world) {
     BindHotkey(ImGuiKey_LeftBracket,  0, u8"World/速度-");
     BindHotkey(ImGuiKey_RightBracket, 0, u8"World/速度+");
     BindHotkey(ImGuiKey_F8,           0, u8"World/开启录制");
+
+    // Selection group commands + hotkeys (Ctrl+Shift+1..9 save, Ctrl+1..9 recall)
+    static const ImGuiKey kDigitKeys[9] = {
+        ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4, ImGuiKey_5,
+        ImGuiKey_6, ImGuiKey_7, ImGuiKey_8, ImGuiKey_9
+    };
+    for (int i = 1; i <= 9; ++i) {
+        char save_cmd[32], recall_cmd[32];
+        std::snprintf(save_cmd,   sizeof(save_cmd),   u8"Select/保存组%d", i);
+        std::snprintf(recall_cmd, sizeof(recall_cmd), u8"Select/恢复组%d", i);
+        int slot = i;
+        RegisterCommand(save_cmd,   [wp, slot] { SaveSelectionGroup(*wp, slot); });
+        RegisterCommand(recall_cmd, [wp, slot] { RecallSelectionGroup(*wp, slot); });
+        BindHotkey(kDigitKeys[i - 1], ImGuiMod_Ctrl | ImGuiMod_Shift, save_cmd);
+        BindHotkey(kDigitKeys[i - 1], ImGuiMod_Ctrl,                  recall_cmd);
+    }
 
     // Metric configuration — store handles for zero-lookup Push
     s_m_ai_ms    = ConfigureMetric("ai/decision_ms", { "ms" });

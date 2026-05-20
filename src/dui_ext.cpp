@@ -5,6 +5,8 @@
 #include <imgui_internal.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -22,22 +24,24 @@ namespace {
 
     // Overlay registries
     std::unordered_map<uint8_t, dui::EntityOverlayFn> g_entity_overlays;
-    struct GlobalOverlay { std::string name; dui::GlobalOverlayFn fn; };
+    std::unordered_map<uint8_t, bool>                  g_entity_overlay_enabled;
+    struct GlobalOverlay { std::string name; dui::GlobalOverlayFn fn; bool enabled = true; };
     std::vector<GlobalOverlay> g_global_overlays;
 
     // Cell overlay registry
     std::unordered_map<uint8_t, dui::CellOverlayFn> g_cell_overlays;
+    std::unordered_map<uint8_t, bool>                g_cell_overlay_enabled;
 
     // Heatmap registry
-    struct HeatmapEntry { std::string name; dui::CellValueFn fn; dui::HeatmapOpts opts; };
+    struct HeatmapEntry { std::string name; dui::CellValueFn fn; dui::HeatmapOpts opts; bool enabled = true; };
     std::vector<HeatmapEntry> g_heatmaps;
 
     // Entity links registry
-    struct EntityLinksEntry { std::string name; dui::EntityLinksFn fn; };
+    struct EntityLinksEntry { std::string name; dui::EntityLinksFn fn; bool enabled = true; };
     std::vector<EntityLinksEntry> g_entity_links;
 
     // Cell links registry
-    struct CellLinksEntry { std::string name; dui::CellLinksFn fn; };
+    struct CellLinksEntry { std::string name; dui::CellLinksFn fn; bool enabled = true; };
     std::vector<CellLinksEntry> g_cell_links;
 
     // Context menu registries
@@ -234,6 +238,8 @@ float CanvasTileHalf_() { return s_cv_view.th; }
 void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl) {
     auto it = g_entity_overlays.find(e.type);
     if (it == g_entity_overlays.end()) return;
+    auto ei = g_entity_overlay_enabled.find(e.type);
+    if (ei != g_entity_overlay_enabled.end() && !ei->second) return;
     CanvasOverlayCtx ctx{ CanvasToScreen_, dl, s_cv_view.th };
     it->second(e, ctx);
 }
@@ -241,7 +247,7 @@ void InvokeEntityOverlays_(const World& world, const Entity& e, ImDrawList* dl) 
 void InvokeGlobalOverlays_(const World& world, ImDrawList* dl) {
     CanvasOverlayCtx ctx{ CanvasToScreen_, dl, s_cv_view.th };
     for (const auto& g : g_global_overlays)
-        if (g.fn) g.fn(world, ctx);
+        if (g.fn && g.enabled) g.fn(world, ctx);
 }
 
 // ---- Cell overlay ----
@@ -253,6 +259,8 @@ void RegisterCellOverlay(uint8_t type, CellOverlayFn fn) {
 void InvokeCellOverlays_(const World& world, const Cell& c, ImDrawList* dl) {
     auto it = g_cell_overlays.find(c.type);
     if (it == g_cell_overlays.end()) return;
+    auto ei = g_cell_overlay_enabled.find(c.type);
+    if (ei != g_cell_overlay_enabled.end() && !ei->second) return;
     CanvasOverlayCtx ctx{ CanvasToScreen_, dl, s_cv_view.th };
     it->second(c, ctx);
 }
@@ -280,7 +288,7 @@ void InvokeCellHeatmaps_(const World& world, ImDrawList* dl,
     float th = CanvasTileHalf_();
 
     for (const auto& h : g_heatmaps) {
-        if (!h.fn) continue;
+        if (!h.fn || !h.enabled) continue;
         float lo = h.opts.min_value, hi = h.opts.max_value;
         if (h.opts.auto_range) {
             lo =  1e30f; hi = -1e30f;
@@ -341,7 +349,7 @@ void InvokeEntityLinks_(const World& world, ImDrawList* dl) {
     for (const auto& e : world.entities) {
         if (e.map_id != world.active_map_id) continue;
         for (const auto& entry : g_entity_links) {
-            if (!entry.fn) continue;
+            if (!entry.fn || !entry.enabled) continue;
             std::vector<EntityLink> links = entry.fn(e);
             for (const auto& lk : links) {
                 auto tit = idx.find(lk.target_id);
@@ -476,7 +484,7 @@ void InvokeCellLinks_(const World& world, ImDrawList* dl) {
     for (const auto& c : world.cells) {
         if (c.map_id != world.active_map_id) continue;
         for (const auto& entry : g_cell_links) {
-            if (!entry.fn) continue;
+            if (!entry.fn || !entry.enabled) continue;
             std::vector<CellLink> links = entry.fn(c);
             for (const auto& lk : links) {
                 ImVec2 from = CanvasToScreen_(static_cast<float>(c.x), static_cast<float>(c.y));
@@ -484,6 +492,71 @@ void InvokeCellLinks_(const World& world, ImDrawList* dl) {
                 if (lk.arrow) DrawArrow_(dl, from, to, lk.color, lk.thickness, lk.dashed);
                 else          DrawLine_ (dl, from, to, lk.color, lk.thickness, lk.dashed);
             }
+        }
+    }
+}
+
+// ---- Layer visibility ----
+
+void ListLayers(std::vector<LayerInfo>& out) {
+    out.clear();
+    for (const auto& g : g_global_overlays)
+        out.push_back({ "GlobalOverlay", g.name.c_str(), g.enabled });
+    for (const auto& h : g_heatmaps)
+        out.push_back({ "Heatmap", h.name.c_str(), h.enabled });
+    for (const auto& l : g_entity_links)
+        out.push_back({ "EntityLinks", l.name.c_str(), l.enabled });
+    for (const auto& l : g_cell_links)
+        out.push_back({ "CellLinks", l.name.c_str(), l.enabled });
+    for (const auto& kv : g_entity_overlays) {
+        bool en = true;
+        auto ei = g_entity_overlay_enabled.find(kv.first);
+        if (ei != g_entity_overlay_enabled.end()) en = ei->second;
+        const char* tn = GetEntityTypeName(kv.first);
+        char nbuf[24];
+        if (!tn) { std::snprintf(nbuf, sizeof(nbuf), "type %u", (unsigned)kv.first); tn = nbuf; }
+        // LayerInfo.name must outlive the call — use a persistent string via static storage
+        // We store the entity type index as key; name is ephemeral so callers should copy.
+        out.push_back({ "EntityOverlay", tn, en });
+    }
+    for (const auto& kv : g_cell_overlays) {
+        bool en = true;
+        auto ei = g_cell_overlay_enabled.find(kv.first);
+        if (ei != g_cell_overlay_enabled.end()) en = ei->second;
+        const char* tn = GetCellTypeName(kv.first);
+        char nbuf[24];
+        if (!tn) { std::snprintf(nbuf, sizeof(nbuf), "type %u", (unsigned)kv.first); tn = nbuf; }
+        out.push_back({ "CellOverlay", tn, en });
+    }
+}
+
+void SetLayerEnabled(const char* kind, const char* name, bool on) {
+    if (!kind || !name) return;
+    if (std::strcmp(kind, "GlobalOverlay") == 0) {
+        for (auto& g : g_global_overlays)
+            if (g.name == name) { g.enabled = on; return; }
+    } else if (std::strcmp(kind, "Heatmap") == 0) {
+        for (auto& h : g_heatmaps)
+            if (h.name == name) { h.enabled = on; return; }
+    } else if (std::strcmp(kind, "EntityLinks") == 0) {
+        for (auto& l : g_entity_links)
+            if (l.name == name) { l.enabled = on; return; }
+    } else if (std::strcmp(kind, "CellLinks") == 0) {
+        for (auto& l : g_cell_links)
+            if (l.name == name) { l.enabled = on; return; }
+    } else if (std::strcmp(kind, "EntityOverlay") == 0) {
+        for (const auto& kv : g_entity_overlays) {
+            const char* tn = GetEntityTypeName(kv.first);
+            char nbuf[24];
+            if (!tn) { std::snprintf(nbuf, sizeof(nbuf), "type %u", (unsigned)kv.first); tn = nbuf; }
+            if (std::strcmp(tn, name) == 0) { g_entity_overlay_enabled[kv.first] = on; return; }
+        }
+    } else if (std::strcmp(kind, "CellOverlay") == 0) {
+        for (const auto& kv : g_cell_overlays) {
+            const char* tn = GetCellTypeName(kv.first);
+            char nbuf[24];
+            if (!tn) { std::snprintf(nbuf, sizeof(nbuf), "type %u", (unsigned)kv.first); tn = nbuf; }
+            if (std::strcmp(tn, name) == 0) { g_cell_overlay_enabled[kv.first] = on; return; }
         }
     }
 }

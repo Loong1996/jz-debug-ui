@@ -412,3 +412,159 @@ DrawProfiler();                       // 火焰图 + 均值表
 // App::Tick 入口/出口已自动夹 BeginProfilerFrame_/EndProfilerFrame_
 // 每帧开始调 BeginProfilerFrame_()，结束调 EndProfilerFrame_()
 ```
+
+---
+
+## 时间控制（Round 6）
+
+```cpp
+// 暂停 / 恢复
+bool  IsWorldPaused();
+void  SetWorldPaused(bool paused);
+bool  ToggleWorldPaused();            // 返回新的 paused 状态
+
+// 速度倍率（范围 0.0625–8.0）
+float GetTimeScale();
+void  SetTimeScale(float s);
+
+// 单帧步进（调一次 = 下一帧跑 raw_dt，然后重新暂停）
+void RequestSingleStep();
+
+// Demo 接入（在 TickMockWorld 之前调用）
+float eff = dui::EffectiveDt(dt);    // 暂停→0; 步进→raw_dt 一次; 否则 dt*scale
+TickMockWorld(world, eff);
+
+// 热键（Demo 绑定）
+//   Space   → 切换暂停
+//   .       → 单帧步进
+//   [       → 速度 ÷2
+//   ]       → 速度 ×2
+// 命令：World/暂停 / World/单帧 / World/速度- / World/速度+
+```
+
+---
+
+## 实体行为日志（Round 6）
+
+```cpp
+#include "dui_entity_log.h"
+
+struct EntityLogEntry { char ts[12]; uint8_t level; char text[160]; };
+
+// 写入（level: 0=Info, 1=Warn, 2=Error）
+void LogEntity     (uint64_t id, const char* fmt, ...);
+void LogEntityWarn (uint64_t id, const char* fmt, ...);
+void LogEntityError(uint64_t id, const char* fmt, ...);
+
+// 配置 / 查询
+void SetEntityLogSize(int n_per_entity);              // 默认 32
+void ClearEntityLog  (uint64_t id);
+const EntityLogEntry* GetEntityLog(uint64_t id, int* out_count);  // 旧→新顺序
+
+// 实体销毁时自动清理（DespawnEntity 内部调用）
+// 详情面板"日志"折叠区自动展示最近条目
+```
+
+---
+
+## Replay 录制 + 时间倒带（Round 6）
+
+```cpp
+#include "dui_replay.h"
+
+// 录制开关（默认关闭）
+void EnableReplayRecording(bool on);      // F8 热键切换
+bool IsReplayRecording();
+void SetReplayBufferSize(int frames);     // 默认 600（≈10s @60fps）
+int  GetReplayBufferFrames();             // 已录帧数
+
+// 进入 / 退出回放查看模式
+bool IsReplayActive();
+void EnterReplay();                       // 暂停 world + 跳到最新帧
+void ExitReplay();                        // 恢复之前的 paused 状态
+
+// 时间轴游标
+void SetReplayCursor(int frame);
+int  GetReplayCursor();
+const World* GetReplayWorld();            // replay_active 时返回历史帧
+
+// 面板热键（回放面板中）
+//   ⏮ / ⏭   跳到首 / 末帧
+//   ◀◀ / ▶▶  后退 / 前进一帧
+//   ▶ / ⏸    自动播放 / 暂停
+//   "返回实时" 退出回放模式
+
+// 注意：回放期间画布禁止交互；REPLAY 水印标明当前帧号
+```
+
+---
+
+## 统一搜索（Round 7）
+
+Ctrl+P 或 Ctrl+F 打开全局搜索面板，一并搜索：
+
+| 前缀 | 类型 | 分值优先级 |
+|------|------|-----------|
+| `[E]`   | Entity（id/label/type/map） | 3–10 |
+| `[CMD]` | 命令（有/无参数） | 7 |
+| `[CELL]` | Cell（坐标/label/type） | 1–9 |
+| `[PIN]`  | 世界标注 | 1–9 |
+| `[BMK]`  | 摄像机书签 | 1–9 |
+
+回车或点击结果项 → 切地图 + 跳坐标 + 选中；命令直接执行。
+
+---
+
+## 小地图（Round 7）
+
+内置面板 **小地图**，默认停靠在右侧。
+
+- 灰色背景俯视图，显示当前地图所有实体（彩色圆点）和格子（彩色方块）
+- 玩家实体（SetPlayerEntityType 注册的类型）用**黄色**显示
+- 白色矩形框 = 场景视图当前视口（跟随 cam_x/y/zoom 实时更新）
+- 左键点击小地图 → 主画布摄像机跳到对应坐标（退出 follow 模式）
+- 悬浮时 tooltip 显示鼠标处的世界坐标
+
+---
+
+## Inspector 过滤器收藏（Round 7）
+
+检视器 → 实体列表工具栏 → **★** 按钮打开预设管理 Popup：
+
+- 点击已保存的预设名称 → 立即应用（search / type_filter / sort_mode / group）
+- `×` 删除单个预设
+- 输入名称 + **保存** → 保存当前过滤组合为新预设
+- 预设持久化到 `dui_inspector_presets.ini`，重启后自动加载
+
+---
+
+## 选择组 Ctrl+1..9（Round 7）
+
+```cpp
+#include "dui_select_group.h"
+
+void SaveSelectionGroup  (World& w, int slot); // slot 1..9，保存当前多选集合
+void RecallSelectionGroup(World& w, int slot); // 恢复并选中该组（不在则无操作）
+bool HasSelectionGroup   (int slot);           // 该槽是否有保存
+int  CountSelectionGroup (int slot);           // 槽内实体数
+
+// 热键（Demo 绑定）
+//   Ctrl+Shift+1..9 → 保存选择组 1..9
+//   Ctrl+1..9       → 恢复选择组 1..9
+// 命令：Select/保存组N / Select/恢复组N（N=1..9）
+```
+
+---
+
+## 图层开关（Round 7）
+
+```cpp
+// 枚举所有已注册图层（GlobalOverlay / Heatmap / EntityLinks / CellLinks /
+//                    EntityOverlay / CellOverlay）
+struct LayerInfo { const char* kind; const char* name; bool enabled; };
+void ListLayers     (std::vector<LayerInfo>& out);
+void SetLayerEnabled(const char* kind, const char* name, bool on);
+
+// 面板：视图 → 图层（默认停靠右侧）
+// 每类型一个折叠区，每条图层一个复选框；取消勾选立即生效
+```

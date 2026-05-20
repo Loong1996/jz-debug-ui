@@ -311,4 +311,12 @@ void ForEachSelected     (const World& w, std::function<void(const Entity&)> fn)
 void ForEachSelectedCell (World& w,       std::function<void(Cell&)>         fn);
 void ForEachSelectedCell (const World& w, std::function<void(const Cell&)>   fn);
 
+// ---- Layer visibility ----
+// Enumerate all registered overlays/heatmaps/links with their current enabled state.
+// kind is one of: "GlobalOverlay", "Heatmap", "EntityLinks", "CellLinks",
+//                 "EntityOverlay", "CellOverlay"
+struct LayerInfo { const char* kind; const char* name; bool enabled; };
+void ListLayers     (std::vector<LayerInfo>& out);
+void SetLayerEnabled(const char* kind, const char* name, bool on);
+
 } // namespace dui

@@ -11,6 +11,8 @@
 #include "dui_profiler.h"
 #include "dui_menubar.h"
 #include "dui_replay.h"
+#include "dui_minimap.h"
+#include "dui_layers.h"
 
 namespace dui {
 
@@ -29,6 +31,8 @@ void DrawAll(World& world, Metrics& metrics) {
     DrawGlobalSearch(world);
     DrawProfiler();
     DrawReplayPanel(world);
+    DrawMinimap(world);
+    DrawLayerPanel(world);
 }
 
 } // namespace dui

@@ -28,6 +28,8 @@ static PanelState s_panels[] = {
     { u8"事件",     true },
     { "Profiler",   true },
     { u8"回放",     true },
+    { u8"小地图",   true },
+    { u8"图层",     true },
 };
 static const int kNumPanels = static_cast<int>(sizeof(s_panels) / sizeof(s_panels[0]));
 

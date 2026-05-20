@@ -36,6 +36,9 @@ add_library(dui STATIC
     src/dui_time.cpp
     src/dui_entity_log.cpp
     src/dui_replay.cpp
+    src/dui_minimap.cpp
+    src/dui_select_group.cpp
+    src/dui_layers.cpp
 )
 target_include_directories(dui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
