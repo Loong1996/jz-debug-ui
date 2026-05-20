@@ -238,6 +238,17 @@ bool    DespawnEntity(World& w, uint64_t id);
 Entity& SpawnEntityAt(World& w, float fx, float fy, uint8_t type,
                       const char* label = nullptr);
 
+// Cell equivalents — DespawnCell also clears the selected-cell highlight.
+bool  DespawnCell(World& w, uint32_t map_id, int x, int y);
+Cell& SpawnCellAt(World& w, uint32_t map_id, int x, int y, uint8_t type,
+                  const char* label = nullptr);
+
+// Cell label function — return value overrides c.label; empty string hides label.
+// Falls back to c.label when no function is registered for the type.
+using CellLabelFn = std::function<std::string(const Cell&)>;
+void        RegisterCellLabelFn(uint8_t type, CellLabelFn fn);
+std::string InvokeCellLabel    (const Cell& c);
+
 // Internal — called by DrawCanvas.
 void  SetCanvasViewState_(float fcx, float fcy, float th, ImVec2 center);
 ImVec2 CanvasToScreen_(float wx, float wy);

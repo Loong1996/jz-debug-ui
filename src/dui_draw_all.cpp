@@ -8,6 +8,7 @@
 #include "dui_detail.h"
 #include "dui_events.h"
 #include "dui_search.h"
+#include "dui_profiler.h"
 
 namespace dui {
 
@@ -22,6 +23,7 @@ void DrawAll(World& world, Metrics& metrics) {
     DrawEvents();
     InvokeUserPanels_();
     DrawGlobalSearch(world);
+    DrawProfiler();
 }
 
 } // namespace dui

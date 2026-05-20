@@ -8,6 +8,9 @@
 #include "dui_hotkeys.h"
 #include "dui_mock.h"
 #include "dui_trails.h"
+#include "dui_pins.h"
+#include "dui_snapshot.h"
+#include "dui_profiler.h"
 #include <imgui.h>
 #include <chrono>
 #include <cmath>
@@ -101,13 +104,20 @@ void SetupRegistrations(World& world) {
         }
     });
 
-    // Background context menu: spawn a new warrior at the right-clicked position
+    // Background context menu: spawn a new warrior or add a pin at the right-clicked position
     RegisterCanvasBackgroundContextMenu([wp](float bx, float by) {
         if (ImGui::MenuItem(u8"在此生成战士")) {
             Entity& ne = SpawnEntityAt(*wp, bx, by, 1, u8"新战士");
             ne.SetColor(100, 200, 100);
             Log(u8"spawned warrior #%llu at (%.0f, %.0f)",
                 static_cast<unsigned long long>(ne.id), bx, by);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem(u8"在此添加标注…")) {
+            static char s_pin_label[64] = {};
+            std::snprintf(s_pin_label, sizeof(s_pin_label), u8"标注@(%.0f,%.0f)", bx, by);
+            uint64_t pid = AddPin(wp->active_map_id, bx, by, s_pin_label);
+            Log(u8"pin #%llu added at (%.0f, %.0f)", static_cast<unsigned long long>(pid), bx, by);
         }
     });
 
@@ -148,6 +158,10 @@ void SetupRegistrations(World& world) {
         return { { bx, by, RGBA(80, 200, 255, 180), 1.5f, true, true } };
     });
 
+    // Seed pins — visible on first launch
+    AddPin(0, 0.f, 0.f, u8"出生点", RGBA(80, 200, 80, 255));
+    AddPin(0, 8.f, 4.f, u8"BOSS 刷点", RGBA(220, 60, 60, 255));
+
     // Zero-arg commands
     RegisterCommand(u8"World/重置世界", [wp] {
         *wp = MakeMockWorld();
@@ -181,8 +195,10 @@ void SetupRegistrations(World& world) {
         }
     });
 
-    // Hotkey: F5 resets the world
+    // Hotkey: F5 resets the world, F6/F7 snapshot save/load
     BindHotkey(ImGuiKey_F5, 0, u8"World/重置世界");
+    BindHotkey(ImGuiKey_F6, 0, u8"World/保存快照…");
+    BindHotkey(ImGuiKey_F7, 0, u8"World/加载快照…");
 
     // Metric configuration — store handles for zero-lookup Push
     s_m_ai_ms    = ConfigureMetric("ai/decision_ms", { "ms" });
@@ -236,6 +252,10 @@ void SetupRegistrations(World& world) {
     }, PanelDock::Right);
 
     // ---- Multi-selection batch command demos ----
+    RegisterCommand(u8"World/清空标注", [] { ClearAllPins(); Log(u8"all pins cleared"); });
+    RegisterCommand(u8"World/保存快照…", [wp] { SaveWorldSnapshotDialog(*wp); });
+    RegisterCommand(u8"World/加载快照…", [wp] { LoadWorldSnapshotDialog(*wp); });
+
     RegisterCommand(u8"Selection/清除选择", [wp] { SelectClear(*wp); });
 
     RegisterCommand(u8"Selection/选中实体染红", [wp] {
@@ -255,9 +275,9 @@ void SetupRegistrations(World& world) {
 void PerFrameDemo(World& world, Metrics& metrics, float dt, int& tick_count) {
     using Clock = std::chrono::steady_clock;
     auto t0 = Clock::now();
-    TickMockWorld(world, dt);
-    RecordTrailSnapshot(world);
-    AccumulateTileVisits(world);
+    { DUI_PROFILE_SCOPE("tick/mock_world");    TickMockWorld(world, dt); }
+    { DUI_PROFILE_SCOPE("tick/trails");        RecordTrailSnapshot(world); }
+    { DUI_PROFILE_SCOPE("tick/tile_visits");   AccumulateTileVisits(world); }
     metrics.tick_ms.push(
         std::chrono::duration<float>(Clock::now() - t0).count() * 1000.f);
     metrics.entity_count.push(static_cast<float>(world.entities.size()));

@@ -317,3 +317,98 @@ UnregisterPanel(u8"AI 状态");
 ## CSV 导出
 
 Watch 面板和 Metric 面板各有 **Export CSV...** 按钮，点击弹出系统保存对话框，输出 UTF-8 BOM 格式的 `.csv` 文件。无需额外 API 调用。
+
+---
+
+## 事件严重级（Round 5）
+
+```cpp
+enum class EventSeverity : uint8_t { Info = 0, Warn = 1, Error = 2 };
+
+PushEvent("Combat", u8"Boss 刷新", 0, EventSeverity::Info);   // 默认
+PushEvent("AI",     u8"路径失败",  0, EventSeverity::Warn);   // 黄色光晕
+PushEvent("System", u8"崩溃转储",  0, EventSeverity::Error);  // 红色光晕
+// 旧调用点零改动（默认参数 EventSeverity::Info）
+```
+
+---
+
+## 摄像机书签（Round 5）
+
+```cpp
+struct CameraBookmark { std::string name; uint32_t map_id; float cam_x, cam_y, zoom; };
+
+SaveCameraBookmark  ("BOSS 房", world);   // 保存当前视角 + 地图
+bool ok = GotoCameraBookmark("BOSS 房", world);  // 切地图 + 跳坐标 + 关 follow
+DeleteCameraBookmark("BOSS 房");
+const std::vector<CameraBookmark>& ListCameraBookmarks();
+CanvasView& GetActiveCanvasView();        // 直接读写 cam_x/y/zoom/follow_player
+
+// 书签持久化到 dui_bookmarks.ini（App::Init 自动加载）
+// Canvas 工具栏"书签"按钮提供 GUI 入口
+```
+
+---
+
+## 世界标注 Pin（Round 5）
+
+```cpp
+struct Pin { uint64_t id; uint32_t map_id; float wx, wy; uint32_t color; std::string text; };
+
+uint64_t AddPin(uint32_t map_id, float wx, float wy,
+                const char* text, uint32_t color = RGBA(255, 200, 0));
+bool     RemovePin(uint64_t pin_id);
+void     ClearAllPins();
+void     ClearPinsOnMap(uint32_t map_id);
+const std::vector<Pin>& ListPins();
+// Inspector "标注 (N)" 折叠区提供 GUI 跳转 / 编辑 / 删除
+// 右键背景菜单 "在此添加标注…" 可直接在画布上插钉
+```
+
+---
+
+## 格子三件（Round 5）
+
+```cpp
+// Spawn / Despawn
+Cell& SpawnCellAt (World& w, uint32_t map_id, int x, int y,
+                   uint8_t type, const char* label = nullptr);
+bool  DespawnCell (World& w, uint32_t map_id, int x, int y);
+
+// 自定义格子标签（覆盖 c.label 字段）
+using CellLabelFn = std::function<std::string(const Cell&)>;
+void        RegisterCellLabelFn(uint8_t type, CellLabelFn fn);
+std::string InvokeCellLabel    (const Cell& c);  // 内部使用
+```
+
+---
+
+## World 快照（Round 5）
+
+```cpp
+// 保存 / 加载 JSON（含 entities / cells / pins / 选中状态）
+bool SaveWorldSnapshot(const World& w, const char* path);
+bool LoadWorldSnapshot(World& w,       const char* path);
+
+// 带系统文件对话框的版本（Win32，弹出保存/打开窗口）
+bool SaveWorldSnapshotDialog(const World& w);
+bool LoadWorldSnapshotDialog(World& w);
+
+// Demo 命令：Ctrl+P → "World/保存快照…" / "World/加载快照…"
+// Demo 热键：F6 保存，F7 加载
+```
+
+---
+
+## Profiler 火焰图（Round 5）
+
+```cpp
+// 插桩
+DUI_PROFILE_SCOPE("name");            // RAII，自动嵌套深度
+
+// 面板（DrawAll 已自动调用，无需手动注册）
+DrawProfiler();                       // 火焰图 + 均值表
+
+// App::Tick 入口/出口已自动夹 BeginProfilerFrame_/EndProfilerFrame_
+// 每帧开始调 BeginProfilerFrame_()，结束调 EndProfilerFrame_()
+```

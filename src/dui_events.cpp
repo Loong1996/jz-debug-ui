@@ -29,10 +29,11 @@ static const uint32_t kPalette[] = {
 static const int kPaletteSize = 8;
 
 struct EventEntry {
-    float    time;
-    int      cat_idx;
-    char     text[128];
-    uint32_t color;
+    float         time;
+    int           cat_idx;
+    char          text[128];
+    uint32_t      color;
+    EventSeverity sev;
 };
 
 struct Category {
@@ -61,13 +62,14 @@ static int find_or_add_cat(const char* name, uint32_t color) {
 
 } // anonymous namespace
 
-void PushEvent(const char* category, const char* text, uint32_t color) {
+void PushEvent(const char* category, const char* text, uint32_t color, EventSeverity sev) {
     if (!category || !text) return;
     int cat_idx = find_or_add_cat(category, color);
     EventEntry e{};
     e.time    = now_sec();
     e.cat_idx = cat_idx;
     e.color   = color ? color : s_cats[cat_idx].color;
+    e.sev     = sev;
     std::snprintf(e.text, sizeof(e.text), "%s", text);
     s_events.push_back(e);
     if (static_cast<int>(s_events.size()) > kMaxEvents)
@@ -159,6 +161,11 @@ void DrawEvents() {
         float ex   = timeline_x0 + frac * timeline_w;
         float ey   = p0.y + ci * row_h + row_h * 0.5f;
 
+        // Severity background tint on the dot
+        if (ev.sev == EventSeverity::Warn)
+            dl->AddCircleFilled(ImVec2(ex, ey), 6.f, IM_COL32(255, 200, 0, 40));
+        else if (ev.sev == EventSeverity::Error)
+            dl->AddCircleFilled(ImVec2(ex, ey), 6.f, IM_COL32(255, 60, 60, 50));
         dl->AddCircleFilled(ImVec2(ex, ey), 4.f, ev.color);
         dl->AddCircle(ImVec2(ex, ey), 4.f, IM_COL32(255, 255, 255, 60), 12, 1.f);
 

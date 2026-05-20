@@ -1,6 +1,7 @@
 #include "dui_inspector.h"
 #include "dui_ext.h"
 #include "dui_detail.h"
+#include "dui_pins.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cstring>
@@ -557,6 +558,10 @@ void DrawInspector(World& world) {
             CellTableImpl(world, cell_show_idx, "##cell_tbl", true);
         }
     }
+
+    // ---- Pins panel ----
+    ImGui::Separator();
+    DrawPinsPanel_(world);
 
     ImGui::End();
 }

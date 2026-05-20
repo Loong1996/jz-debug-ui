@@ -1,6 +1,7 @@
 #include "dui_canvas.h"
 #include "dui_ext.h"
 #include "dui_trails.h"
+#include "dui_pins.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
@@ -10,13 +11,92 @@
 
 namespace dui {
 
+static CanvasView s_default_view;  // shared default view instance
+
+// ---- Camera bookmarks ----
+
+static std::vector<CameraBookmark> s_bookmarks;
+static const char* kBkmPath = "dui_bookmarks.ini";
+
+void LoadCameraBookmarks_() {
+    s_bookmarks.clear();
+    FILE* f = std::fopen(kBkmPath, "r");
+    if (!f) return;
+    char line[256];
+    while (std::fgets(line, sizeof(line), f)) {
+        CameraBookmark bk;
+        if (std::sscanf(line, "bkm map=%u cx=%f cy=%f zoom=%f name=",
+                        &bk.map_id, &bk.cam_x, &bk.cam_y, &bk.zoom) == 4) {
+            // name is the rest of the line after "name="
+            const char* p = std::strstr(line, "name=");
+            if (p) {
+                p += 5;
+                size_t len = std::strlen(p);
+                while (len > 0 && (p[len-1] == '\n' || p[len-1] == '\r')) len--;
+                bk.name = std::string(p, len);
+            }
+            if (!bk.name.empty()) s_bookmarks.push_back(std::move(bk));
+        }
+    }
+    std::fclose(f);
+}
+
+void SaveCameraBookmarks_() {
+    FILE* f = std::fopen(kBkmPath, "w");
+    if (!f) return;
+    for (const auto& bk : s_bookmarks)
+        std::fprintf(f, "bkm map=%u cx=%f cy=%f zoom=%f name=%s\n",
+                     bk.map_id, bk.cam_x, bk.cam_y, bk.zoom, bk.name.c_str());
+    std::fclose(f);
+}
+
+void SaveCameraBookmark(const char* name, World& world) {
+    if (!name || !name[0]) return;
+    const CanvasView& v = s_default_view;
+    for (auto& bk : s_bookmarks) {
+        if (bk.name == name) {
+            bk.map_id = world.active_map_id;
+            bk.cam_x  = v.cam_x; bk.cam_y = v.cam_y; bk.zoom = v.zoom;
+            SaveCameraBookmarks_(); return;
+        }
+    }
+    CameraBookmark bk{ std::string(name), world.active_map_id, v.cam_x, v.cam_y, v.zoom };
+    s_bookmarks.push_back(std::move(bk));
+    SaveCameraBookmarks_();
+}
+
+bool GotoCameraBookmark(const char* name, World& world) {
+    if (!name) return false;
+    for (const auto& bk : s_bookmarks) {
+        if (bk.name != name) continue;
+        if (bk.map_id != world.active_map_id) SwitchActiveMap(world, bk.map_id);
+        CanvasView& v  = s_default_view;
+        v.cam_x        = bk.cam_x;
+        v.cam_y        = bk.cam_y;
+        v.zoom         = bk.zoom;
+        v.follow_player = false;
+        return true;
+    }
+    return false;
+}
+
+void DeleteCameraBookmark(const char* name) {
+    if (!name) return;
+    for (auto it = s_bookmarks.begin(); it != s_bookmarks.end(); ++it) {
+        if (it->name == name) { s_bookmarks.erase(it); SaveCameraBookmarks_(); return; }
+    }
+}
+
+const std::vector<CameraBookmark>& ListCameraBookmarks() { return s_bookmarks; }
+
 constexpr float kViewHalf = 18.f;
 constexpr float kZoomMin  = 0.25f;
 constexpr float kZoomMax  = 4.0f;
 
+CanvasView& GetActiveCanvasView() { return s_default_view; }
+
 void DrawCanvas(World& world, CanvasView* view) {
-    static CanvasView s_default_view;
-    if (!view) view = &s_default_view;
+    if (!view) view = &s_default_view;  // NOLINT — s_default_view defined above
 
     // Reset camera when active map changes
     static uint32_t s_last_drawn_map_id = ~0u;
@@ -106,6 +186,43 @@ void DrawCanvas(World& world, CanvasView* view) {
         char zoom_buf[16];
         std::snprintf(zoom_buf, sizeof(zoom_buf), "%.0f%%", view->zoom * 100.f);
         if (ImGui::Button(zoom_buf)) view->zoom = 1.f;
+    }
+    ImGui::SameLine();
+    // Bookmark button — popup to save/load camera positions
+    if (ImGui::Button(u8"书签")) ImGui::OpenPopup("##bkm_popup");
+    if (ImGui::BeginPopup("##bkm_popup")) {
+        static char s_bkm_name[64] = {};
+        ImGui::SetNextItemWidth(140.f);
+        ImGui::InputText(u8"##bkm_name_input", s_bkm_name, sizeof(s_bkm_name));
+        ImGui::SameLine();
+        if (ImGui::Button(u8"保存") && s_bkm_name[0]) {
+            SaveCameraBookmark(s_bkm_name, world);
+            s_bkm_name[0] = '\0';
+            ImGui::CloseCurrentPopup();
+        }
+        if (!s_bookmarks.empty()) {
+            ImGui::Separator();
+            for (int i = 0; i < static_cast<int>(s_bookmarks.size()); ++i) {
+                const auto& bk = s_bookmarks[i];
+                char label[96];
+                const char* mn = GetMapName(bk.map_id);
+                if (mn) std::snprintf(label, sizeof(label), "%s  [%s]", bk.name.c_str(), mn);
+                else    std::snprintf(label, sizeof(label), "%s  [map%u]", bk.name.c_str(), bk.map_id);
+                if (ImGui::MenuItem(label)) {
+                    GotoCameraBookmark(bk.name.c_str(), world);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                ImGui::PushID(i);
+                if (ImGui::SmallButton("x")) {
+                    DeleteCameraBookmark(bk.name.c_str());
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::PopStyleVar();
@@ -285,6 +402,19 @@ void DrawCanvas(World& world, CanvasView* view) {
             if (c.map_id != world.active_map_id) continue;
             InvokeCellOverlays_(world, c, dl);
         }
+
+        // --- 1c. Cell labels (only when zoomed in enough) ---
+        if (view->show_labels && th >= 12.f) {
+            for (const auto& c : world.cells) {
+                if (c.map_id != world.active_map_id) continue;
+                std::string lbl = InvokeCellLabel(c);
+                if (lbl.empty()) continue;
+                ImVec2 ctr = ToScreen(static_cast<float>(c.x), static_cast<float>(c.y));
+                float  lw  = ImGui::CalcTextSize(lbl.c_str()).x;
+                dl->AddText(ImVec2(ctr.x - lw * 0.5f, ctr.y - ImGui::GetFontSize() * 0.5f),
+                            IM_COL32(220, 220, 220, 180), lbl.c_str());
+            }
+        }
     }
 
     // --- 1c. Heatmaps — covers entire viewport, independent of show_cells ---
@@ -415,6 +545,7 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
     }
     InvokeGlobalOverlays_(world, dl);
+    DrawPinsOverlay_(world, dl);
 
     // --- 5c. Entity links and cell links ---
     if (view->show_links) {
@@ -456,15 +587,19 @@ void DrawCanvas(World& world, CanvasView* view) {
 
     // --- Click selection with overlap popup ---
     struct Hit { int kind; int index; };
-    static bool s_lmb_pan      = false;
-    static int  s_popup_wx     = 0, s_popup_wy = 0;
-    static int  s_popup_nhits  = 0, s_popup_nskipped = 0;
-    static Hit  s_popup_hits[32];
+    static bool   s_lmb_pan        = false;
+    static bool   s_marquee_active  = false;
+    static ImVec2 s_marquee_start   = {};
+    static int    s_popup_wx        = 0, s_popup_wy = 0;
+    static int    s_popup_nhits     = 0, s_popup_nskipped = 0;
+    static Hit    s_popup_hits[32];
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         int wx, wy;
         ToWorld(ImGui::GetIO().MousePos, wx, wy);
-        s_lmb_pan = false;
+        bool mod = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift;
+        s_lmb_pan       = false;
+        s_marquee_active = false;
 
         Hit hits[32];
         int nhits = 0, nskipped = 0;
@@ -484,15 +619,25 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
 
         if (nhits == 0) {
-            s_lmb_pan = true;
+            if (mod) {
+                // Shift/Ctrl + empty tile: start marquee box-select
+                s_marquee_active = true;
+                s_marquee_start  = ImGui::GetIO().MousePos;
+            } else {
+                s_lmb_pan = true;
+            }
         } else if (nhits == 1 && nskipped == 0) {
             if (hits[0].kind == 0) {
                 const auto& e = world.entities[hits[0].index];
-                SelectClear(world);
-                SelectAdd(world, e.id);
-                view->cam_x         = e.fx;
-                view->cam_y         = e.fy;
-                view->follow_player = true;
+                if (mod) {
+                    SelectToggle(world, e.id);
+                } else {
+                    SelectClear(world);
+                    SelectAdd(world, e.id);
+                    view->cam_x         = e.fx;
+                    view->cam_y         = e.fy;
+                    view->follow_player = true;
+                }
             } else {
                 const auto& c        = world.cells[hits[0].index];
                 world.sel_cell_valid = true;
@@ -506,6 +651,27 @@ void DrawCanvas(World& world, CanvasView* view) {
             s_popup_nskipped = nskipped;
             std::memcpy(s_popup_hits, hits, sizeof(Hit) * static_cast<size_t>(nhits));
             ImGui::OpenPopup("##overlap_pick");
+        }
+    }
+
+    // --- Marquee box-select (Shift/Ctrl + left-drag on empty) ---
+    if (s_marquee_active) {
+        ImVec2 curr = ImGui::GetIO().MousePos;
+        ImVec2 mn(fminf(s_marquee_start.x, curr.x), fminf(s_marquee_start.y, curr.y));
+        ImVec2 mx(fmaxf(s_marquee_start.x, curr.x), fmaxf(s_marquee_start.y, curr.y));
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            ImDrawList* fg = ImGui::GetForegroundDrawList();
+            fg->AddRectFilled(mn, mx, IM_COL32(0, 150, 255, 28));
+            fg->AddRect      (mn, mx, IM_COL32(0, 200, 255, 200), 0.f, 0, 1.5f);
+        } else {
+            // Released: add all entities whose screen center falls inside the rect
+            for (const auto& e : world.entities) {
+                if (e.map_id != world.active_map_id) continue;
+                ImVec2 sp = ToScreen(e.fx, e.fy);
+                if (sp.x >= mn.x && sp.x <= mx.x && sp.y >= mn.y && sp.y <= mx.y)
+                    SelectAdd(world, e.id, false);
+            }
+            s_marquee_active = false;
         }
     }
 

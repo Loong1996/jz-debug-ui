@@ -522,4 +522,37 @@ Entity& SpawnEntityAt(World& w, float fx, float fy, uint8_t type, const char* la
     return e;
 }
 
+// ---- Cell label functions ----
+
+namespace { std::unordered_map<uint8_t, CellLabelFn> g_cell_label_fns; }
+
+void RegisterCellLabelFn(uint8_t type, CellLabelFn fn) {
+    g_cell_label_fns[type] = std::move(fn);
+}
+std::string InvokeCellLabel(const Cell& c) {
+    auto it = g_cell_label_fns.find(c.type);
+    if (it != g_cell_label_fns.end()) return it->second(c);
+    return c.label[0] ? std::string(c.label) : std::string();
+}
+
+// ---- Cell spawn / despawn ----
+
+bool DespawnCell(World& w, uint32_t map_id, int x, int y) {
+    for (auto it = w.cells.begin(); it != w.cells.end(); ++it) {
+        if (it->map_id != map_id || it->x != x || it->y != y) continue;
+        w.cells.erase(it);
+        if (w.sel_cell_valid && w.sel_cell_x == x && w.sel_cell_y == y)
+            w.sel_cell_valid = false;
+        return true;
+    }
+    return false;
+}
+
+Cell& SpawnCellAt(World& w, uint32_t map_id, int x, int y, uint8_t type, const char* label) {
+    Cell& c = w.SpawnCell(x, y);
+    c.SetMapId(map_id).SetType(type);
+    if (label) c.SetLabel("%s", label);
+    return c;
+}
+
 } // namespace dui
