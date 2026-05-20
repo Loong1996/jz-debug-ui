@@ -1,4 +1,5 @@
 #include "dui_detail.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <unordered_map>
 
@@ -89,7 +90,8 @@ bool InvokeCellEditor_(Cell& c) {
 // ---- DrawEntityDetail ----
 
 void DrawEntityDetail(World& world) {
-    ImGui::Begin(u8"实体详情");
+    if (!ImGui::Begin(u8"实体详情", &BuiltinPanelOpenRef(u8"实体详情")))
+        { ImGui::End(); return; }
 
     if (world.selected_id == 0) {
         ImGui::TextDisabled(u8"(未选中实体)");

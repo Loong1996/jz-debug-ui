@@ -32,6 +32,7 @@ add_library(dui STATIC
     src/dui_pins.cpp
     src/dui_snapshot.cpp
     src/dui_profiler.cpp
+    src/dui_menubar.cpp
 )
 target_include_directories(dui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src

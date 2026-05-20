@@ -1,4 +1,5 @@
 #include "dui_events.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <chrono>
 #include <deque>
@@ -77,7 +78,7 @@ void PushEvent(const char* category, const char* text, uint32_t color, EventSeve
 }
 
 void DrawEvents() {
-    if (!ImGui::Begin(u8"事件")) { ImGui::End(); return; }
+    if (!ImGui::Begin(u8"事件", &BuiltinPanelOpenRef(u8"事件"))) { ImGui::End(); return; }
 
     // --- Toolbar ---
     if (ImGui::Button(s_paused ? u8"▶ 继续" : u8"⏸ 暂停")) {

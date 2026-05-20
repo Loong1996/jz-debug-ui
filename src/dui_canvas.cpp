@@ -2,6 +2,7 @@
 #include "dui_ext.h"
 #include "dui_trails.h"
 #include "dui_pins.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
@@ -106,7 +107,8 @@ void DrawCanvas(World& world, CanvasView* view) {
         s_last_drawn_map_id = world.active_map_id;
     }
 
-    ImGui::Begin(u8"场景视图");
+    if (!ImGui::Begin(u8"场景视图", &BuiltinPanelOpenRef(u8"场景视图")))
+        { ImGui::End(); return; }
 
     // --- Find player ---
     const Entity* player = nullptr;

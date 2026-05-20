@@ -1,12 +1,13 @@
 #include "dui_metrics.h"
 #include "dui_user_metrics.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <implot.h>
 
 namespace dui {
 
 void DrawMetrics(const Metrics& m) {
-    if (ImGui::Begin(u8"性能指标")) {
+    if (ImGui::Begin(u8"性能指标", &BuiltinPanelOpenRef(u8"性能指标"))) {
         if (ImPlot::BeginPlot(u8"帧耗时 (ms)", ImVec2(-1, 150))) {
             ImPlot::SetupAxes(u8"帧", "ms");
             ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0, 5.0, ImPlotCond_Always);

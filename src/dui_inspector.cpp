@@ -2,6 +2,7 @@
 #include "dui_ext.h"
 #include "dui_detail.h"
 #include "dui_pins.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cstring>
@@ -10,7 +11,7 @@
 
 namespace dui {
 
-// ---- Entity table: 3 cols (Type / 名称 / 坐标), Type cell tinted with entity color ----
+// ---- Entity table helper ----
 static void EntityTableImpl(World& world, const std::vector<int>& idxs,
                              const char* tbl_id, bool with_scroll) {
     ImGuiTableFlags flags =
@@ -36,13 +37,11 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
 
-        // Tint the Type column cell with the entity's color (semi-transparent)
         ImVec4 c4 = ImGui::ColorConvertU32ToFloat4(e.color);
         c4.w = 0.4f;
         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg,
                                ImGui::ColorConvertFloat4ToU32(c4));
 
-        // Invisible Selectable spanning the full row, then SameLine to write Type text
         ImGui::PushID(static_cast<int>(e.id));
         if (ImGui::Selectable("##row", selected,
                 ImGuiSelectableFlags_SpanAllColumns,
@@ -75,7 +74,7 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
     ImGui::EndTable();
 }
 
-// ---- Cell table: 3 cols (Type / 名称 / 坐标), Type cell tinted with cell color ----
+// ---- Cell table helper ----
 static void CellTableImpl(World& world, const std::vector<int>& idxs,
                           const char* tbl_id, bool with_scroll) {
     ImGuiTableFlags flags =
@@ -131,59 +130,163 @@ static void CellTableImpl(World& world, const std::vector<int>& idxs,
     ImGui::EndTable();
 }
 
-void DrawInspector(World& world) {
-    ImGui::Begin(u8"检视器");
+// ---- Sub-sections -----------------------------------------------------------
 
-    // ---- Map selector ----
-    {
-        uint32_t all_map_ids[64]; int n_all_maps = 0;
-        for (const auto& e : world.entities) {
-            bool dup = false;
-            for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == e.map_id) { dup = true; break; }
-            if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = e.map_id;
-        }
-        for (const auto& c : world.cells) {
-            bool dup = false;
-            for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == c.map_id) { dup = true; break; }
-            if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = c.map_id;
-        }
-        for (int i = 0; i < n_all_maps; ++i)
-            for (int j = i + 1; j < n_all_maps; ++j)
-                if (all_map_ids[j] < all_map_ids[i]) { uint32_t t = all_map_ids[i]; all_map_ids[i] = all_map_ids[j]; all_map_ids[j] = t; }
-        char map_bufs[64][48]; const char* map_items[64];
-        int  map_combo_idx = 0;
-        for (int i = 0; i < n_all_maps; ++i) {
-            int ent_cnt = 0, cell_cnt = 0;
-            for (const auto& e : world.entities) if (e.map_id == all_map_ids[i]) ++ent_cnt;
-            for (const auto& c : world.cells)    if (c.map_id == all_map_ids[i]) ++cell_cnt;
-            const char* mn = GetMapName(all_map_ids[i]);
-            if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"%s [%u]  实体%d  格%d", mn, all_map_ids[i], ent_cnt, cell_cnt);
-            else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"Map %u  实体%d  格%d", all_map_ids[i], ent_cnt, cell_cnt);
-            map_items[i] = map_bufs[i];
-            if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
-        }
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
-        ImGui::TextUnformatted(u8"地图"); ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1.f);
-        if (ImGui::Combo("##insp_map", &map_combo_idx, map_items, n_all_maps) && n_all_maps > 0)
-            SwitchActiveMap(world, all_map_ids[map_combo_idx]);
-        ImGui::PopStyleVar();
-        ImGui::Separator();
+static void draw_map_picker(World& world) {
+    uint32_t all_map_ids[64]; int n_all_maps = 0;
+    for (const auto& e : world.entities) {
+        bool dup = false;
+        for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == e.map_id) { dup = true; break; }
+        if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = e.map_id;
     }
+    for (const auto& c : world.cells) {
+        bool dup = false;
+        for (int k = 0; k < n_all_maps; ++k) if (all_map_ids[k] == c.map_id) { dup = true; break; }
+        if (!dup && n_all_maps < 64) all_map_ids[n_all_maps++] = c.map_id;
+    }
+    for (int i = 0; i < n_all_maps; ++i)
+        for (int j = i + 1; j < n_all_maps; ++j)
+            if (all_map_ids[j] < all_map_ids[i]) { uint32_t t = all_map_ids[i]; all_map_ids[i] = all_map_ids[j]; all_map_ids[j] = t; }
+    char map_bufs[64][48]; const char* map_items[64];
+    int  map_combo_idx = 0;
+    for (int i = 0; i < n_all_maps; ++i) {
+        int ent_cnt = 0, cell_cnt = 0;
+        for (const auto& e : world.entities) if (e.map_id == all_map_ids[i]) ++ent_cnt;
+        for (const auto& c : world.cells)    if (c.map_id == all_map_ids[i]) ++cell_cnt;
+        const char* mn = GetMapName(all_map_ids[i]);
+        if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"%s [%u]  实体%d  格%d", mn, all_map_ids[i], ent_cnt, cell_cnt);
+        else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), u8"Map %u  实体%d  格%d", all_map_ids[i], ent_cnt, cell_cnt);
+        map_items[i] = map_bufs[i];
+        if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
+    ImGui::TextUnformatted(u8"地图"); ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1.f);
+    if (ImGui::Combo("##insp_map", &map_combo_idx, map_items, n_all_maps) && n_all_maps > 0)
+        SwitchActiveMap(world, all_map_ids[map_combo_idx]);
+    ImGui::PopStyleVar();
+}
 
-    // ---- Static state ----
-    static char search[64]       = {};
-    static int  type_filter      = -1;
-    static int  sort_mode        = 0;   // 0=默认 1=ID 2=Type 3=名称 4=距主角
-    static bool group_by_type    = false;
-    static char cell_search[64]  = {};
-    static bool cell_group       = false;
-    static int  cell_type_filter = -1;
-    static int  cell_sort_mode   = 0;   // 0=默认 1=Type 2=名称 3=坐标
+static void draw_selected_entity(World& world) {
+    for (auto& e : world.entities) {
+        if (e.id != world.selected_id) continue;
 
-    // ---- Collect unique entity types present this frame (active map only) ----
-    int  types[32];
-    int  ntypes = 0;
+        // Section header
+        char sec[80];
+        const char* etn = GetEntityTypeName(e.type);
+        if (etn) std::snprintf(sec, sizeof(sec), u8"选中实体 — %s  [%s]", e.label, etn);
+        else     std::snprintf(sec, sizeof(sec), u8"选中实体 — %s  [type %d]", e.label, e.type);
+        ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.f, 1.f), "%s", sec);
+        ImGui::Separator();
+
+        ImGui::PushID(static_cast<int>(e.id));
+        ImGui::Text("ID: %llu", static_cast<unsigned long long>(e.id));
+        ImGui::Text(u8"x: %d   y: %d", e.x, e.y);
+        ImGui::Text(u8"半径: %.2f", e.radius);
+        InvokeEntityDrawer(e);
+        ImGui::PopID();
+
+        // Same-position overlay
+        int sel_x = e.x, sel_y = e.y;
+        bool has_ov = false;
+        for (const auto& oe : world.entities) {
+            if (oe.id == world.selected_id || oe.map_id != world.active_map_id) continue;
+            if (oe.x == sel_x && oe.y == sel_y) { has_ov = true; break; }
+        }
+        if (has_ov) {
+            ImGui::Spacing();
+            ImGui::TextDisabled(u8"▸ 同坐标其他实体");
+            for (auto& oe : world.entities) {
+                if (oe.id == world.selected_id || oe.map_id != world.active_map_id) continue;
+                if (oe.x != sel_x || oe.y != sel_y) continue;
+                ImGui::PushID(static_cast<int>(oe.id));
+                char buf[64];
+                const char* ovtn = GetEntityTypeName(oe.type);
+                if (ovtn) std::snprintf(buf, sizeof(buf), "  [%s] %s", ovtn, oe.label);
+                else      std::snprintf(buf, sizeof(buf), u8"  [type %d] %s", oe.type, oe.label);
+                if (ImGui::Selectable(buf)) {
+                    SelectClear(world);
+                    SelectAdd(world, oe.id);
+                }
+                ImGui::PopID();
+            }
+        }
+        break;
+    }
+}
+
+static void draw_selected_cell(World& world) {
+    char cell_hdr[64];
+    std::snprintf(cell_hdr, sizeof(cell_hdr),
+        u8"选中格子 (%d, %d)", world.sel_cell_x, world.sel_cell_y);
+    ImGui::TextColored(ImVec4(0.85f, 1.f, 0.6f, 1.f), "%s", cell_hdr);
+    ImGui::Separator();
+
+    int n = 0;
+    for (auto& c : world.cells) {
+        if (c.map_id != world.active_map_id) continue;
+        if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
+        ImGui::PushID(n);
+        const char* ctn = GetCellTypeName(c.type); char cnfb[16];
+        if (!ctn) { std::snprintf(cnfb, sizeof(cnfb), "%d", c.type); ctn = cnfb; }
+        char chdr[64];
+        std::snprintf(chdr, sizeof(chdr), "[%s] %s##csc%d", ctn, c.label, n);
+        ImVec4 ch4 = ImGui::ColorConvertU32ToFloat4(c.color);
+        ch4.w = 0.55f; ImGui::PushStyleColor(ImGuiCol_Header,        ImGui::ColorConvertFloat4ToU32(ch4));
+        ch4.w = 0.70f; ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::ColorConvertFloat4ToU32(ch4));
+        ch4.w = 0.85f; ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImGui::ColorConvertFloat4ToU32(ch4));
+        if (ImGui::CollapsingHeader(chdr, ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text(u8"坐标: (%d, %d)", c.x, c.y);
+            InvokeCellDrawer(c);
+            std::string ctext = InvokeCellDetailText(c);
+            if (!ctext.empty()) {
+                ImGui::Separator();
+                ImGui::TextUnformatted(ctext.c_str(), ctext.c_str() + ctext.size());
+            }
+            if (ImGui::CollapsingHeader(u8"编辑##cedit")) {
+                InvokeCellEditor_(c);
+            }
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::PopID();
+        ++n;
+    }
+    if (n == 0) ImGui::TextDisabled(u8"(此位置无格子)");
+
+    // Entities on the selected cell
+    bool any_ent = false;
+    for (const auto& e : world.entities)
+        if (e.map_id == world.active_map_id && e.x == world.sel_cell_x && e.y == world.sel_cell_y)
+            { any_ent = true; break; }
+    if (any_ent) {
+        ImGui::Spacing();
+        ImGui::TextDisabled(u8"▸ 压在此格的实体");
+        for (auto& e : world.entities) {
+            if (e.map_id != world.active_map_id) continue;
+            if (e.x != world.sel_cell_x || e.y != world.sel_cell_y) continue;
+            bool is_sel = IsSelected(world, e.id);
+            ImGui::PushID(static_cast<int>(e.id));
+            char buf[64];
+            const char* etn2 = GetEntityTypeName(e.type);
+            if (etn2) std::snprintf(buf, sizeof(buf), "  [%s] %s", etn2, e.label);
+            else      std::snprintf(buf, sizeof(buf), u8"  [type %d] %s", e.type, e.label);
+            if (ImGui::Selectable(buf, is_sel)) {
+                if (is_sel) SelectClear(world);
+                else { SelectClear(world); SelectAdd(world, e.id); }
+            }
+            ImGui::PopID();
+        }
+    }
+}
+
+static void draw_entity_list_tab(World& world) {
+    static char search[64]    = {};
+    static int  type_filter   = -1;
+    static int  sort_mode     = 0;
+    static bool group_by_type = false;
+
+    // Collect unique types
+    int  types[32]; int ntypes = 0;
     for (const auto& e : world.entities) {
         if (e.map_id != world.active_map_id) continue;
         bool dup = false;
@@ -210,7 +313,6 @@ void DrawInspector(World& world) {
         for (int i = 0; i < ntypes; ++i)
             if (types[i] == type_filter) { combo_idx = i + 1; break; }
 
-    // ---- Filter lambda (supports #1003 for id-exact match) ----
     auto pass_filter = [&](const Entity& e) {
         if (e.map_id != world.active_map_id) return false;
         if (type_filter != -1 && static_cast<int>(e.type) != type_filter) return false;
@@ -226,13 +328,11 @@ void DrawInspector(World& world) {
         return tn && std::strstr(tn, search) != nullptr;
     };
 
-    // ---- Collect filtered indices ----
     std::vector<int> show_idx;
     show_idx.reserve(world.entities.size());
     for (int i = 0; i < static_cast<int>(world.entities.size()); ++i)
         if (pass_filter(world.entities[i])) show_idx.push_back(i);
 
-    // ---- Sort ----
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
         if (e.id == world.player_id && e.map_id == world.active_map_id) { player = &e; break; }
@@ -254,9 +354,8 @@ void DrawInspector(World& world) {
         }
     });
 
-    // ---- Toolbar (one row) ----
+    // Toolbar
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
-
     ImGui::SetNextItemWidth(130.f);
     ImGui::InputTextWithHint("##search", u8"搜索 (#id 或名称)", search, sizeof(search));
     ImGui::SameLine();
@@ -269,8 +368,6 @@ void DrawInspector(World& world) {
     ImGui::Combo("##sort", &sort_mode, sort_items, IM_ARRAYSIZE(sort_items));
     ImGui::SameLine();
     ImGui::Checkbox(u8"分组", &group_by_type);
-
-    // Right-aligned entity count
     {
         char cnt[32];
         std::snprintf(cnt, sizeof(cnt), "%d / %d",
@@ -284,15 +381,12 @@ void DrawInspector(World& world) {
             ImGui::TextDisabled("%s", cnt);
         }
     }
-
     ImGui::PopStyleVar();
-    ImGui::Separator();
 
-    // ---- Entity list ----
+    // List
     if (show_idx.empty()) {
         ImGui::TextDisabled(u8"(无匹配项)");
     } else if (group_by_type) {
-        // Collect group types (sorted ascending)
         int gtypes[32]; int ngtypes = 0;
         for (int i : show_idx) {
             int t = static_cast<int>(world.entities[i].type);
@@ -303,7 +397,6 @@ void DrawInspector(World& world) {
         for (int i = 0; i < ngtypes; ++i)
             for (int j = i + 1; j < ngtypes; ++j)
                 if (gtypes[j] < gtypes[i]) { int t = gtypes[i]; gtypes[i] = gtypes[j]; gtypes[j] = t; }
-
         for (int g = 0; g < ngtypes; ++g) {
             int gt = gtypes[g];
             std::vector<int> grp;
@@ -315,131 +408,21 @@ void DrawInspector(World& world) {
             if (gtn) std::snprintf(hdr, sizeof(hdr), "%s  (%d)##grp%d", gtn, static_cast<int>(grp.size()), gt);
             else     std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##grp%d", gt, static_cast<int>(grp.size()), gt);
             if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                char tid[16];
-                std::snprintf(tid, sizeof(tid), "##tg%d", gt);
+                char tid[16]; std::snprintf(tid, sizeof(tid), "##tg%d", gt);
                 EntityTableImpl(world, grp, tid, false);
             }
         }
     } else {
         EntityTableImpl(world, show_idx, "##ent_tbl", true);
     }
+}
 
-    // ---- Selected entity details ----
-    if (world.selected_id != 0) {
-        ImGui::Separator();
-        int sel_x = 0, sel_y = 0;
-        bool found = false;
-        for (auto& e : world.entities) {
-            if (e.id != world.selected_id) continue;
-            char sec[80];
-            const char* etn = GetEntityTypeName(e.type);
-            if (etn) std::snprintf(sec, sizeof(sec), u8"基本信息 — %s  [%s]##basic", e.label, etn);
-            else     std::snprintf(sec, sizeof(sec), u8"基本信息 — %s  [type %d]##basic", e.label, e.type);
-            if (ImGui::CollapsingHeader(sec, ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::PushID(static_cast<int>(e.id));
-                ImGui::Text("ID: %llu", static_cast<unsigned long long>(e.id));
-                ImGui::Text(u8"x: %d   y: %d", e.x, e.y);
-                ImGui::Text(u8"半径: %.2f", e.radius);
-                InvokeEntityDrawer(e);
-                ImGui::PopID();
-            }
-            sel_x = e.x; sel_y = e.y; found = true;
-            break;
-        }
-        if (found) {
-            // Check for same-position entities
-            bool has_ov = false;
-            for (const auto& e : world.entities) {
-                if (e.id == world.selected_id) continue;
-                if (e.map_id != world.active_map_id) continue;
-                if (e.x == sel_x && e.y == sel_y) { has_ov = true; break; }
-            }
-            if (has_ov &&
-                ImGui::CollapsingHeader(u8"同坐标其他实体##ov", ImGuiTreeNodeFlags_DefaultOpen)) {
-                for (auto& e : world.entities) {
-                    if (e.id == world.selected_id) continue;
-                    if (e.map_id != world.active_map_id) continue;
-                    if (e.x != sel_x || e.y != sel_y) continue;
-                    ImGui::PushID(static_cast<int>(e.id));
-                    char buf[64];
-                    const char* ovtn = GetEntityTypeName(e.type);
-                    if (ovtn) std::snprintf(buf, sizeof(buf), "[%s] %s", ovtn, e.label);
-                    else      std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
-                    if (ImGui::Selectable(buf)) {
-                        SelectClear(world);
-                        SelectAdd(world, e.id);
-                    }
-                    ImGui::PopID();
-                }
-            }
-        }
-    }
+static void draw_cell_list_tab(World& world) {
+    static char cell_search[64]  = {};
+    static bool cell_group       = false;
+    static int  cell_type_filter = -1;
+    static int  cell_sort_mode   = 0;
 
-    // ---- Selected cell details ----
-    if (world.sel_cell_valid) {
-        ImGui::Separator();
-        char cell_hdr[64];
-        std::snprintf(cell_hdr, sizeof(cell_hdr),
-            u8"选中格子 (%d, %d)##sc", world.sel_cell_x, world.sel_cell_y);
-        if (ImGui::CollapsingHeader(cell_hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
-            int n = 0;
-            for (auto& c : world.cells) {
-                if (c.map_id != world.active_map_id) continue;
-                if (c.x != world.sel_cell_x || c.y != world.sel_cell_y) continue;
-                ImGui::PushID(n);
-                const char* ctn = GetCellTypeName(c.type); char cnfb[16];
-                if (!ctn) { std::snprintf(cnfb, sizeof(cnfb), "%d", c.type); ctn = cnfb; }
-                char chdr[64];
-                std::snprintf(chdr, sizeof(chdr), "[%s] %s##csc%d", ctn, c.label, n);
-                ImVec4 ch4 = ImGui::ColorConvertU32ToFloat4(c.color);
-                ch4.w = 0.55f; ImGui::PushStyleColor(ImGuiCol_Header,        ImGui::ColorConvertFloat4ToU32(ch4));
-                ch4.w = 0.70f; ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::ColorConvertFloat4ToU32(ch4));
-                ch4.w = 0.85f; ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImGui::ColorConvertFloat4ToU32(ch4));
-                if (ImGui::CollapsingHeader(chdr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                    ImGui::Text(u8"坐标: (%d, %d)", c.x, c.y);
-                    InvokeCellDrawer(c);
-                    // Registered cell detail text (RegisterCellDetailText)
-                    std::string ctext = InvokeCellDetailText(c);
-                    if (!ctext.empty()) {
-                        ImGui::Separator();
-                        ImGui::TextUnformatted(ctext.c_str(), ctext.c_str() + ctext.size());
-                    }
-                    // Registered cell editor (RegisterCellEditor)
-                    if (ImGui::CollapsingHeader(u8"编辑##cedit")) {
-                        InvokeCellEditor_(c);
-                    }
-                }
-                ImGui::PopStyleColor(3);
-                ImGui::PopID();
-                ++n;
-            }
-            if (n == 0) ImGui::TextDisabled(u8"(此位置无格子)");
-        }
-        // Entities on the selected cell
-        bool any_ent = false;
-        for (const auto& e : world.entities)
-            if (e.map_id == world.active_map_id && e.x == world.sel_cell_x && e.y == world.sel_cell_y) { any_ent = true; break; }
-        if (any_ent &&
-            ImGui::CollapsingHeader(u8"压在此格的实体##sce", ImGuiTreeNodeFlags_DefaultOpen)) {
-            for (auto& e : world.entities) {
-                if (e.map_id != world.active_map_id) continue;
-                if (e.x != world.sel_cell_x || e.y != world.sel_cell_y) continue;
-                bool is_sel = IsSelected(world, e.id);
-                ImGui::PushID(static_cast<int>(e.id));
-                char buf[64];
-                const char* etn2 = GetEntityTypeName(e.type);
-                if (etn2) std::snprintf(buf, sizeof(buf), "[%s] %s", etn2, e.label);
-                else      std::snprintf(buf, sizeof(buf), u8"[type %d] %s", e.type, e.label);
-                if (ImGui::Selectable(buf, is_sel)) {
-                    if (is_sel) SelectClear(world);
-                    else { SelectClear(world); SelectAdd(world, e.id); }
-                }
-                ImGui::PopID();
-            }
-        }
-    }
-
-    // ---- Cell list: collect unique types for combo, filter, sort (active map only) ----
     int  ctypes_all[32]; int nctypes_all = 0;
     for (const auto& c : world.cells) {
         if (c.map_id != world.active_map_id) continue;
@@ -452,6 +435,7 @@ void DrawInspector(World& world) {
         for (int j = i + 1; j < nctypes_all; ++j)
             if (ctypes_all[j] < ctypes_all[i]) { int t = ctypes_all[i]; ctypes_all[i] = ctypes_all[j]; ctypes_all[j] = t; }
 
+    static const char* ALL_LABEL = u8"全部";
     const char* cell_combo_items[33];
     cell_combo_items[0] = ALL_LABEL;
     char cell_type_bufs[32][32];
@@ -491,77 +475,101 @@ void DrawInspector(World& world) {
         }
     });
 
-    // ---- Cell list header + toolbar ----
-    ImGui::Separator();
-    if (ImGui::CollapsingHeader(u8"地图格子##cell_list", 0)) {
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
-        ImGui::SetNextItemWidth(130.f);
-        ImGui::InputTextWithHint("##csearch", u8"搜索名称/类型", cell_search, sizeof(cell_search));
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(80.f);
-        if (ImGui::Combo("##ctype", &cell_combo_idx, cell_combo_items, nctypes_all + 1))
-            cell_type_filter = (cell_combo_idx == 0) ? -1 : ctypes_all[cell_combo_idx - 1];
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(100.f);
-        const char* csort_items[] = { u8"默认", "Type", u8"名称", u8"坐标" };
-        ImGui::Combo("##csort", &cell_sort_mode, csort_items, IM_ARRAYSIZE(csort_items));
-        ImGui::SameLine();
-        ImGui::Checkbox(u8"分组##cgrp", &cell_group);
-
-        {
-            char ccnt[32];
-            std::snprintf(ccnt, sizeof(ccnt), "%d / %d",
-                static_cast<int>(cell_show_idx.size()),
-                static_cast<int>(world.cells.size()));
-            float cnt_w = ImGui::CalcTextSize(ccnt).x + 4.f;
-            float avail  = ImGui::GetContentRegionAvail().x;
-            if (avail > cnt_w) {
-                ImGui::SameLine();
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - cnt_w);
-                ImGui::TextDisabled("%s", ccnt);
-            }
-        }
-
-        ImGui::PopStyleVar();
-
-        if (cell_show_idx.empty()) {
-            ImGui::TextDisabled(u8"(无匹配项)");
-        } else if (cell_group) {
-            int cgtypes[32]; int ncgtypes = 0;
-            for (int i : cell_show_idx) {
-                int t = static_cast<int>(world.cells[i].type);
-                bool dup = false;
-                for (int k = 0; k < ncgtypes; ++k) if (cgtypes[k] == t) { dup = true; break; }
-                if (!dup && ncgtypes < 32) cgtypes[ncgtypes++] = t;
-            }
-            for (int i = 0; i < ncgtypes; ++i)
-                for (int j = i + 1; j < ncgtypes; ++j)
-                    if (cgtypes[j] < cgtypes[i]) { int t = cgtypes[i]; cgtypes[i] = cgtypes[j]; cgtypes[j] = t; }
-
-            for (int g = 0; g < ncgtypes; ++g) {
-                int gt = cgtypes[g];
-                std::vector<int> cgrp;
-                for (int i : cell_show_idx)
-                    if (static_cast<int>(world.cells[i].type) == gt)
-                        cgrp.push_back(i);
-                char hdr[64];
-                const char* cgtn = GetCellTypeName(static_cast<uint8_t>(gt));
-                if (cgtn) std::snprintf(hdr, sizeof(hdr), "%s  (%d)##cgrp%d", cgtn, static_cast<int>(cgrp.size()), gt);
-                else      std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##cgrp%d", gt, static_cast<int>(cgrp.size()), gt);
-                if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
-                    char ctid[16];
-                    std::snprintf(ctid, sizeof(ctid), "##ctg%d", gt);
-                    CellTableImpl(world, cgrp, ctid, false);
-                }
-            }
-        } else {
-            CellTableImpl(world, cell_show_idx, "##cell_tbl", true);
+    // Toolbar
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.f, 2.f));
+    ImGui::SetNextItemWidth(130.f);
+    ImGui::InputTextWithHint("##csearch", u8"搜索名称/类型", cell_search, sizeof(cell_search));
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(80.f);
+    if (ImGui::Combo("##ctype", &cell_combo_idx, cell_combo_items, nctypes_all + 1))
+        cell_type_filter = (cell_combo_idx == 0) ? -1 : ctypes_all[cell_combo_idx - 1];
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100.f);
+    const char* csort_items[] = { u8"默认", "Type", u8"名称", u8"坐标" };
+    ImGui::Combo("##csort", &cell_sort_mode, csort_items, IM_ARRAYSIZE(csort_items));
+    ImGui::SameLine();
+    ImGui::Checkbox(u8"分组##cgrp", &cell_group);
+    {
+        char ccnt[32];
+        std::snprintf(ccnt, sizeof(ccnt), "%d / %d",
+            static_cast<int>(cell_show_idx.size()),
+            static_cast<int>(world.cells.size()));
+        float cnt_w = ImGui::CalcTextSize(ccnt).x + 4.f;
+        float avail  = ImGui::GetContentRegionAvail().x;
+        if (avail > cnt_w) {
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - cnt_w);
+            ImGui::TextDisabled("%s", ccnt);
         }
     }
+    ImGui::PopStyleVar();
 
-    // ---- Pins panel ----
+    // List
+    if (cell_show_idx.empty()) {
+        ImGui::TextDisabled(u8"(无匹配项)");
+    } else if (cell_group) {
+        int cgtypes[32]; int ncgtypes = 0;
+        for (int i : cell_show_idx) {
+            int t = static_cast<int>(world.cells[i].type);
+            bool dup = false;
+            for (int k = 0; k < ncgtypes; ++k) if (cgtypes[k] == t) { dup = true; break; }
+            if (!dup && ncgtypes < 32) cgtypes[ncgtypes++] = t;
+        }
+        for (int i = 0; i < ncgtypes; ++i)
+            for (int j = i + 1; j < ncgtypes; ++j)
+                if (cgtypes[j] < cgtypes[i]) { int t = cgtypes[i]; cgtypes[i] = cgtypes[j]; cgtypes[j] = t; }
+        for (int g = 0; g < ncgtypes; ++g) {
+            int gt = cgtypes[g];
+            std::vector<int> cgrp;
+            for (int i : cell_show_idx)
+                if (static_cast<int>(world.cells[i].type) == gt)
+                    cgrp.push_back(i);
+            char hdr[64];
+            const char* cgtn = GetCellTypeName(static_cast<uint8_t>(gt));
+            if (cgtn) std::snprintf(hdr, sizeof(hdr), "%s  (%d)##cgrp%d", cgtn, static_cast<int>(cgrp.size()), gt);
+            else      std::snprintf(hdr, sizeof(hdr), u8"Type %d  (%d)##cgrp%d", gt, static_cast<int>(cgrp.size()), gt);
+            if (ImGui::CollapsingHeader(hdr, ImGuiTreeNodeFlags_DefaultOpen)) {
+                char ctid[16]; std::snprintf(ctid, sizeof(ctid), "##ctg%d", gt);
+                CellTableImpl(world, cgrp, ctid, false);
+            }
+        }
+    } else {
+        CellTableImpl(world, cell_show_idx, "##cell_tbl", true);
+    }
+}
+
+// ---- DrawInspector ----------------------------------------------------------
+
+void DrawInspector(World& world) {
+    if (!ImGui::Begin(u8"检视器", &BuiltinPanelOpenRef(u8"检视器")))
+        { ImGui::End(); return; }
+
+    draw_map_picker(world);
     ImGui::Separator();
-    DrawPinsPanel_(world);
+
+    // Current selection — shown above tabs when something is selected
+    bool has_sel_ent  = (world.selected_id != 0);
+    bool has_sel_cell = world.sel_cell_valid;
+
+    if (has_sel_ent)  { draw_selected_entity(world); ImGui::Separator(); }
+    if (has_sel_cell) { draw_selected_cell(world);   ImGui::Separator(); }
+
+    // Tab bar for list views
+    if (ImGui::BeginTabBar("##insp_tabs")) {
+        if (ImGui::BeginTabItem(u8"实体列表")) {
+            draw_entity_list_tab(world);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem(u8"格子列表")) {
+            draw_cell_list_tab(world);
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem(u8"标注")) {
+            DrawPinsPanel_(world);
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
 
     ImGui::End();
 }

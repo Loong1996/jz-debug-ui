@@ -1,5 +1,6 @@
 #include "dui_log.h"
 #include "dui_metrics.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <windows.h>
 #include <algorithm>
@@ -208,7 +209,8 @@ void DrawLog() {
     static bool show_error = true;
     static char filter[128] = {};
 
-    ImGui::Begin(u8"日志");
+    if (!ImGui::Begin(u8"日志", &BuiltinPanelOpenRef(u8"日志")))
+        { ImGui::End(); return; }
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
     ImGui::Checkbox("Info",  &show_info);  ImGui::SameLine();
@@ -340,7 +342,8 @@ static void draw_sparkline(const WatchEntry& w) {
 }
 
 void DrawWatch() {
-    ImGui::Begin(u8"监视");
+    if (!ImGui::Begin(u8"监视", &BuiltinPanelOpenRef(u8"监视")))
+        { ImGui::End(); return; }
 
     static char watch_filter[64] = {};
     float csv_btn_w = ImGui::CalcTextSize("CSV...").x

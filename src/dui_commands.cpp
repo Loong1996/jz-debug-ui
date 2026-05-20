@@ -1,5 +1,6 @@
 #include "dui_commands.h"
 #include "dui_hotkeys.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <initializer_list>
 #include <string>
@@ -147,7 +148,8 @@ void RegisterCommandWithArgs(const char* name,
 }
 
 void DrawCommands() {
-    ImGui::Begin(u8"命令");
+    if (!ImGui::Begin(u8"命令", &BuiltinPanelOpenRef(u8"命令")))
+        { ImGui::End(); return; }
 
     static char search[64] = {};
     ImGui::SetNextItemWidth(-1.f);

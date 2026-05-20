@@ -1,4 +1,5 @@
 #include "dui_profiler.h"
+#include "dui_menubar.h"
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -102,7 +103,8 @@ ProfileScope::~ProfileScope() {
 // ---- Flame chart drawing ----
 
 void DrawProfiler() {
-    ImGui::Begin(u8"Profiler");
+    if (!ImGui::Begin(u8"Profiler", &BuiltinPanelOpenRef("Profiler")))
+        { ImGui::End(); return; }
 
     ImGui::Text(u8"帧总耗时: %.3f ms", s_last_frame_ms);
     ImGui::Separator();

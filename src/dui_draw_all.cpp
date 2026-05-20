@@ -9,10 +9,12 @@
 #include "dui_events.h"
 #include "dui_search.h"
 #include "dui_profiler.h"
+#include "dui_menubar.h"
 
 namespace dui {
 
 void DrawAll(World& world, Metrics& metrics) {
+    DrawMenuBar();
     DrawInspector(world);
     DrawCanvas(world);
     DrawMetrics(metrics);
