@@ -30,8 +30,14 @@ World MakeMockWorld() {
          .SetType(static_cast<uint8_t>(i % 3))
          .SetLabel("#%d", 1000 + i);
 
-    w.player_id   = w.entities[0].id;
-    w.selected_id = w.player_id;
+    // Blood packs — on-screen data entities that should not be set as follow target
+    const uint32_t hp_col = RGBA(80, 220, 80);
+    w.SpawnEntity(1100).SetMapId(0).SetPos( 3.f,  5.f).SetRadius(0.5f).SetColor(hp_col).SetType(3).SetLabel(u8"血包A").SetNoFollow();
+    w.SpawnEntity(1101).SetMapId(0).SetPos(-5.f,  2.f).SetRadius(0.5f).SetColor(hp_col).SetType(3).SetLabel(u8"血包B").SetNoFollow();
+    w.SpawnEntity(1102).SetMapId(0).SetPos( 7.f, -4.f).SetRadius(0.5f).SetColor(hp_col).SetType(3).SetLabel(u8"血包C").SetNoFollow();
+
+    w.follower_id   = w.entities[0].id;
+    w.selected_id = w.follower_id;
     w.selected_ids.push_back(w.entities[0].id);
 
     const uint32_t wall_col  = RGBA(90,  70,  70,  200);

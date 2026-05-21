@@ -113,7 +113,7 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable;
     if (with_scroll) flags |= ImGuiTableFlags_ScrollY;
 
-    if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, with_scroll ? 220.f : 0.f)))
+    if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, with_scroll ? ImGui::GetContentRegionAvail().y : 0.f)))
         return;
     if (with_scroll) ImGui::TableSetupScrollFreeze(0, 1);
     ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   64.f);
@@ -129,10 +129,19 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
         ImVec4 c4 = ImGui::ColorConvertU32ToFloat4(ResolveEntityColor(e)); c4.w = 0.4f;
         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::ColorConvertFloat4ToU32(c4));
         ImGui::PushID(static_cast<int>(e.id));
-        if (ImGui::Selectable("##row", selected, ImGuiSelectableFlags_SpanAllColumns,
+        if (ImGui::Selectable("##row", selected,
+                              ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick,
                               ImVec2(0.f, ImGui::GetTextLineHeight()))) {
-            if (ImGui::GetIO().KeyCtrl) SelectToggle(world, e.id);
-            else { SelectClear(world); if (!selected) SelectAdd(world, e.id); }
+            if (ImGui::GetIO().KeyCtrl) {
+                SelectToggle(world, e.id);
+            } else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                SelectClear(world);
+                SelectAdd(world, e.id);
+                if (!e.no_follow) world.follower_id = e.id;
+            } else {
+                SelectClear(world);
+                if (!selected) SelectAdd(world, e.id);
+            }
         }
         if (HasEntityContextMenu_(e.type) && ImGui::BeginPopupContextItem("##ectx")) {
             CanvasContextCtx cctx{ &world, ImGui::GetMousePos(), e.fx, e.fy, world.active_map_id };
@@ -158,7 +167,7 @@ static void CellTableImpl(World& world, const std::vector<int>& idxs,
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable;
     if (with_scroll) flags |= ImGuiTableFlags_ScrollY;
 
-    if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, with_scroll ? 220.f : 0.f)))
+    if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, with_scroll ? ImGui::GetContentRegionAvail().y : 0.f)))
         return;
     if (with_scroll) ImGui::TableSetupScrollFreeze(0, 1);
     ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   64.f);
@@ -245,7 +254,7 @@ static void draw_entity_list_tab(World& world) {
 
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
-        if (e.id == world.player_id && e.map_id == world.active_map_id) { player = &e; break; }
+        if (e.id == world.follower_id && e.map_id == world.active_map_id) { player = &e; break; }
 
     std::sort(idx.begin(), idx.end(), [&](int ai, int bi) {
         const auto& a = world.entities[ai]; const auto& b = world.entities[bi];

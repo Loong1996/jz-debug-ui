@@ -119,18 +119,14 @@ void DrawCanvas(World& world, CanvasView* view) {
     // --- Find player ---
     const Entity* player = nullptr;
     for (const auto& e : world.entities)
-        if (e.id == world.player_id && e.map_id == world.active_map_id)
+        if (e.id == world.follower_id && e.map_id == world.active_map_id)
             { player = &e; break; }
 
-    // --- Follow mode: track selected entity, fall back to player ---
-    if (view->follow_player) {
-        const Entity* target = nullptr;
-        if (world.selected_id != 0)
-            for (const auto& e : world.entities)
-                if (e.id == world.selected_id && e.map_id == world.active_map_id)
-                    { target = &e; break; }
-        if (!target) target = player;
-        if (target) { view->cam_x = target->fx; view->cam_y = target->fy; }
+    // --- Follow mode: lock to follower_id only.
+    // Single-click inspects without moving the camera; double-click jumps explicitly.
+    if (view->follow_player && player) {
+        view->cam_x = player->fx;
+        view->cam_y = player->fy;
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
@@ -490,14 +486,10 @@ void DrawCanvas(World& world, CanvasView* view) {
         }
     }
 
-    // --- 2b. View boundary indicator (orange diamond, game-world range) ---
+    // --- 2b. View boundary indicator (orange box, 37x37 game-world range around player) ---
     {
         float bcx = player ? player->fx : fcx;
         float bcy = player ? player->fy : fcy;
-        if (world.selected_id != 0)
-            for (const auto& e : world.entities)
-                if (e.id == world.selected_id && e.map_id == world.active_map_id)
-                    { bcx = e.fx; bcy = e.fy; break; }
         float hf = kViewHalf + 0.5f;
         ImVec2 bnd[4] = {
             ToScreen(bcx - hf, bcy - hf),
@@ -530,6 +522,11 @@ void DrawCanvas(World& world, CanvasView* view) {
                 scaled[k] = ImVec2(cpt.x + (pts[k].x - cpt.x) * r,
                                    cpt.y + (pts[k].y - cpt.y) * r);
             dl->AddQuadFilled(scaled[0], scaled[1], scaled[2], scaled[3], ResolveEntityColor(e));
+
+            // Player outline: cyan — this entity is the current follow target
+            if (e.id == world.follower_id) {
+                dl->AddQuad(pts[0], pts[1], pts[2], pts[3], IM_COL32(0, 220, 255, 255), 2.5f);
+            }
 
             // Selected outline: bright yellow for primary, dimmer for multi-select
             if (IsSelected(world, e.id)) {
@@ -712,8 +709,9 @@ void DrawCanvas(World& world, CanvasView* view) {
                 } else {
                     SelectClear(world);
                     SelectAdd(world, e.id);
-                    // Double-click jumps camera; single-click selects without moving
-                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    // Double-click: set as player (follow target) + jump camera
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !e.no_follow) {
+                        world.follower_id = e.id;
                         view->cam_x = e.fx;
                         view->cam_y = e.fy;
                     }

@@ -21,9 +21,10 @@ struct Entity {
     float    vx = 0.f, vy = 0.f;  // velocity (grid units/sec)
     float    radius  = 0.8f;      // visual fill ratio within cell (0..1)
     uint32_t color   = RGBA(180, 180, 180);
-    uint8_t  type    = 0;         // caller-defined tag (0 = generic)
+    uint8_t  type      = 0;         // caller-defined tag (0 = generic)
+    bool     no_follow = false;    // if true, double-click cannot set this as follower_id
     char     label[64] = {};
-    void*    userdata  = nullptr; // caller-owned pointer; library does not interpret or free
+    void*    userdata  = nullptr;  // caller-owned pointer; library does not interpret or free
 
     // SetPos syncs fx/fy and derives x/y via rounding
     Entity& SetPos(float fx_, float fy_) {
@@ -35,6 +36,7 @@ struct Entity {
     Entity& SetVel(float vx_, float vy_)  { vx = vx_; vy = vy_; return *this; }
     Entity& SetRadius(float r)            { radius = r; return *this; }
     Entity& SetType(uint8_t t)            { type = t; return *this; }
+    Entity& SetNoFollow(bool v = true)    { no_follow = v; return *this; }
     Entity& SetMapId(uint32_t mid)        { map_id = mid; return *this; }
     Entity& SetUserdata(void* ud)         { userdata = ud; return *this; }
     Entity& SetColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 220) {
@@ -82,7 +84,7 @@ struct World {
     std::vector<Cell>     cells;
     uint32_t active_map_id = 0;
     uint64_t selected_id = 0;   // primary selection; 0 when nothing selected
-    uint64_t player_id   = 0;
+    uint64_t follower_id = 0;
     bool sel_cell_valid = false;
     int  sel_cell_x     = 0;
     int  sel_cell_y     = 0;

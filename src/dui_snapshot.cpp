@@ -39,7 +39,7 @@ bool SaveWorldSnapshot(const World& w, const char* path) {
     fprintf(f, "{\n");
     fprintf(f, "  \"active_map_id\": %u,\n",  w.active_map_id);
     fprintf(f, "  \"selected_id\": %llu,\n",  static_cast<unsigned long long>(w.selected_id));
-    fprintf(f, "  \"player_id\": %llu,\n",    static_cast<unsigned long long>(w.player_id));
+    fprintf(f, "  \"follower_id\": %llu,\n",    static_cast<unsigned long long>(w.follower_id));
 
     // entities
     fprintf(f, "  \"entities\": [\n");
@@ -212,10 +212,10 @@ bool LoadWorldSnapshot(World& w, const char* path) {
     uint64_t new_selected_id = static_cast<uint64_t>(v);
     ps.consume(',');
 
-    // player_id
-    if (!ps.expect_key("player_id")) return fail("player_id");
-    if (!ps.read_number(v)) return fail("player_id value");
-    uint64_t new_player_id = static_cast<uint64_t>(v);
+    // follower_id
+    if (!ps.expect_key("follower_id")) return fail("follower_id");
+    if (!ps.read_number(v)) return fail("follower_id value");
+    uint64_t new_follower_id = static_cast<uint64_t>(v);
     ps.consume(',');
 
     // entities
@@ -349,7 +349,7 @@ bool LoadWorldSnapshot(World& w, const char* path) {
     w.selected_id    = new_selected_id;
     w.selected_ids.clear();
     if (new_selected_id) w.selected_ids.push_back(new_selected_id);
-    w.player_id      = new_player_id;
+    w.follower_id      = new_follower_id;
     w.sel_cell_valid = false;
 
     ClearAllPins();

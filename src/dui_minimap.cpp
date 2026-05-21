@@ -89,7 +89,7 @@ void DrawMinimap(World& world) {
         float sy = toMapY(e.fy);
         float r = 3.f;
         ImU32 col;
-        if (IsPlayerEntityType(e.type) || e.id == rw.player_id) {
+        if (IsPlayerEntityType(e.type) || e.id == rw.follower_id) {
             col = IM_COL32(255, 230, 50, 255);
             r   = 4.5f;
         } else {

@@ -39,6 +39,7 @@ void SetupRegistrations(World& world) {
         { 0, u8"主角" },
         { 1, u8"战士" },
         { 2, u8"法师" },
+        { 3, u8"血包" },
     });
 
     RegisterCellTypeNames({
