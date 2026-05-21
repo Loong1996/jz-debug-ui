@@ -183,7 +183,7 @@ void DrawCommands() {
                     : ImGui::CalcTextSize(hk.c_str()).x + ImGui::GetStyle().ItemSpacing.x;
                 float btn_w = ImGui::CalcTextSize(u8"执行").x
                             + ImGui::GetStyle().FramePadding.x * 2.f;
-                float kb_w  = ImGui::CalcTextSize(u8"⌨").x
+                float kb_w  = ImGui::CalcTextSize("[K]").x
                             + ImGui::GetStyle().FramePadding.x * 2.f;
                 float sel_w = ImGui::GetContentRegionAvail().x
                             - btn_w - kb_w - hk_w
@@ -194,7 +194,7 @@ void DrawCommands() {
                 ImGui::SameLine();
                 exec |= ImGui::SmallButton(u8"执行");
                 ImGui::SameLine();
-                if (ImGui::SmallButton(u8"⌨")) {
+                if (ImGui::SmallButton("[K]")) {
                     s_capture_cmd_idx = i;
                     s_open_capture    = true;
                 }

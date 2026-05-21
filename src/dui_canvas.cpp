@@ -693,9 +693,8 @@ void DrawCanvas(World& world, CanvasView* view) {
                 } else {
                     SelectClear(world);
                     SelectAdd(world, e.id);
-                    view->cam_x         = e.fx;
-                    view->cam_y         = e.fy;
-                    view->follow_player = true;
+                    view->cam_x = e.fx;
+                    view->cam_y = e.fy;
                 }
             } else {
                 const auto& c        = world.cells[hits[0].index];
@@ -775,9 +774,8 @@ void DrawCanvas(World& world, CanvasView* view) {
                     const auto& e = world.entities[h.index];
                     SelectClear(world);
                     SelectAdd(world, e.id);
-                    view->cam_x         = e.fx;
-                    view->cam_y         = e.fy;
-                    view->follow_player = true;
+                    view->cam_x = e.fx;
+                    view->cam_y = e.fy;
                 } else {
                     const auto& c        = world.cells[h.index];
                     world.sel_cell_valid = true;
