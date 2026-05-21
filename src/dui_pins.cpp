@@ -2,6 +2,7 @@
 #include "dui_canvas.h"
 #include "dui_ext.h"
 #include <imgui.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
