@@ -172,9 +172,7 @@ void DrawCanvas(World& world, CanvasView* view) {
     ImGui::Checkbox(u8"实体",   &view->show_ents);   ImGui::SameLine();
     ImGui::Checkbox(u8"标签",   &view->show_labels); ImGui::SameLine();
     ImGui::Checkbox(u8"坐标轴", &view->show_axis);   ImGui::SameLine();
-    ImGui::Checkbox(u8"轨迹",   &view->show_trails); ImGui::SameLine();
-    ImGui::Checkbox(u8"连线",   &view->show_links);  ImGui::SameLine();
-    ImGui::Checkbox(u8"热力图", &view->show_heatmaps);
+    ImGui::Checkbox(u8"轨迹",   &view->show_trails);
 
     // === Toolbar row 2: camera controls ===
     if (ImGui::RadioButton(u8"跟随",  view->follow_player))  view->follow_player = true;
