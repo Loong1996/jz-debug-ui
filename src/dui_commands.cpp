@@ -339,12 +339,15 @@ void DrawCommands() {
         } else {
             for (int k = ImGuiKey_NamedKey_BEGIN; k < ImGuiKey_NamedKey_END; k++) {
                 ImGuiKey key = static_cast<ImGuiKey>(k);
-                // Skip modifier-only keys
+                // Skip modifier-only keys and mouse/wheel inputs — capturing a
+                // mouse click as a hotkey would bind every left-click to the
+                // command, which is almost always an accident, not intent.
                 if (key == ImGuiKey_LeftCtrl  || key == ImGuiKey_RightCtrl  ||
                     key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift ||
                     key == ImGuiKey_LeftAlt   || key == ImGuiKey_RightAlt   ||
                     key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper ||
                     key == ImGuiKey_Escape) continue;
+                if (key >= ImGuiKey_MouseLeft && key <= ImGuiKey_MouseWheelY) continue;
                 if (!ImGui::IsKeyPressed(key, false)) continue;
                 if (s_capture_cmd_idx >= 0 &&
                     s_capture_cmd_idx < static_cast<int>(g_cmds.size())) {
