@@ -126,7 +126,7 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
         bool selected = IsSelected(world, e.id);
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        ImVec4 c4 = ImGui::ColorConvertU32ToFloat4(e.color); c4.w = 0.4f;
+        ImVec4 c4 = ImGui::ColorConvertU32ToFloat4(GetEntityTypeColor(e.type, e.color)); c4.w = 0.4f;
         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::ColorConvertFloat4ToU32(c4));
         ImGui::PushID(static_cast<int>(e.id));
         if (ImGui::Selectable("##row", selected, ImGuiSelectableFlags_SpanAllColumns,

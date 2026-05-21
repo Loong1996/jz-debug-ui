@@ -20,6 +20,7 @@ namespace {
     std::unordered_map<uint8_t,  dui::EntityDrawer>    g_entity_drawers;
     std::unordered_map<uint8_t,  dui::CellDrawer>      g_cell_drawers;
     std::unordered_map<uint8_t,  std::string>           g_entity_type_names;
+    std::unordered_map<uint8_t,  uint32_t>              g_entity_type_colors;
     std::unordered_map<uint8_t,  std::string>           g_cell_type_names;
     std::unordered_map<uint32_t, std::string>           g_map_names;
     std::unordered_map<uint8_t,  dui::EntityLabelFn>    g_label_fns;
@@ -138,6 +139,15 @@ void RegisterCellDrawer(uint8_t type, CellDrawer drawer) {
 
 void RegisterEntityTypeName(uint8_t type, const char* name) {
     g_entity_type_names[type] = name ? name : "";
+}
+
+void RegisterEntityTypeColor(uint8_t type, uint32_t color) {
+    g_entity_type_colors[type] = color;
+}
+
+uint32_t GetEntityTypeColor(uint8_t type, uint32_t fallback) {
+    auto it = g_entity_type_colors.find(type);
+    return it != g_entity_type_colors.end() ? it->second : fallback;
 }
 void RegisterCellTypeName(uint8_t type, const char* name) {
     g_cell_type_names[type] = name ? name : "";
@@ -651,6 +661,8 @@ Entity& SpawnEntityAt(World& w, float fx, float fy, uint8_t type, const char* la
         if (e.id >= new_id) new_id = e.id + 1;
     Entity& e = w.SpawnEntity(new_id);
     e.SetPos(fx, fy).SetType(type).SetMapId(w.active_map_id);
+    auto tc = g_entity_type_colors.find(type);
+    if (tc != g_entity_type_colors.end()) e.color = tc->second;
     if (label) e.SetLabel("%s", label);
     return e;
 }

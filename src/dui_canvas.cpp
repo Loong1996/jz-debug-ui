@@ -529,7 +529,7 @@ void DrawCanvas(World& world, CanvasView* view) {
             for (int k = 0; k < 4; ++k)
                 scaled[k] = ImVec2(cpt.x + (pts[k].x - cpt.x) * r,
                                    cpt.y + (pts[k].y - cpt.y) * r);
-            dl->AddQuadFilled(scaled[0], scaled[1], scaled[2], scaled[3], e.color);
+            dl->AddQuadFilled(scaled[0], scaled[1], scaled[2], scaled[3], GetEntityTypeColor(e.type, e.color));
 
             // Selected outline: bright yellow for primary, dimmer for multi-select
             if (IsSelected(world, e.id)) {

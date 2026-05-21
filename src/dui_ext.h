@@ -36,6 +36,14 @@ void RegisterMapNames       (std::initializer_list<std::pair<uint32_t, const cha
 const char* GetEntityTypeName(uint8_t type);
 const char* GetCellTypeName  (uint8_t type);
 
+// Register a default display color for an entity type.
+// Applies automatically when SpawnEntityAt is called.
+// Also used by Canvas and Inspector to colorize entities by type.
+// Per-entity e.color is used as fallback when no type color is registered.
+void     RegisterEntityTypeColor(uint8_t type, uint32_t color);
+// Returns the registered type color, or fallback if none is registered.
+uint32_t GetEntityTypeColor     (uint8_t type, uint32_t fallback = RGBA(180, 180, 180, 220));
+
 // Register a display name for a map id value.
 void RegisterMapName(uint32_t map_id, const char* name);
 const char* GetMapName(uint32_t map_id);   // nullptr if not registered
