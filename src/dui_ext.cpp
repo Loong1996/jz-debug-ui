@@ -24,7 +24,7 @@ namespace {
     std::unordered_map<uint8_t,  std::string>           g_cell_type_names;
     std::unordered_map<uint32_t, std::string>           g_map_names;
     std::unordered_map<uint8_t,  dui::EntityLabelFn>    g_label_fns;
-    std::unordered_map<uint64_t, uint32_t>               g_entity_markers;
+    std::unordered_map<uint64_t, dui::EntityMarkerData>  g_entity_markers;
     uint8_t g_player_entity_type = 255;
     bool    g_player_type_set    = false;
 
@@ -149,6 +149,13 @@ uint32_t GetEntityTypeColor(uint8_t type, uint32_t fallback) {
     auto it = g_entity_type_colors.find(type);
     return it != g_entity_type_colors.end() ? it->second : fallback;
 }
+
+uint32_t ResolveEntityColor(const Entity& e) {
+    static const uint32_t kDefault = RGBA(180, 180, 180); // matches Entity::color default
+    if (e.color != kDefault) return e.color;              // user explicitly set a color
+    auto it = g_entity_type_colors.find(e.type);
+    return it != g_entity_type_colors.end() ? it->second : e.color;
+}
 void RegisterCellTypeName(uint8_t type, const char* name) {
     g_cell_type_names[type] = name ? name : "";
 }
@@ -219,13 +226,13 @@ std::string InvokeEntityLabel(const Entity& e) {
     return e.label;
 }
 
-void SetEntityMarker(uint64_t entity_id, uint32_t color) {
-    g_entity_markers[entity_id] = color;
+void SetEntityMarker(uint64_t entity_id, uint32_t color, MarkerShape shape) {
+    g_entity_markers[entity_id] = { color, shape };
 }
 void ClearEntityMarker(uint64_t entity_id) {
     g_entity_markers.erase(entity_id);
 }
-const uint32_t* GetEntityMarker(uint64_t entity_id) {
+const EntityMarkerData* GetEntityMarker(uint64_t entity_id) {
     auto it = g_entity_markers.find(entity_id);
     return it != g_entity_markers.end() ? &it->second : nullptr;
 }

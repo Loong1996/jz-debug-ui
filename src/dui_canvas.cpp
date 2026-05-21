@@ -529,7 +529,7 @@ void DrawCanvas(World& world, CanvasView* view) {
             for (int k = 0; k < 4; ++k)
                 scaled[k] = ImVec2(cpt.x + (pts[k].x - cpt.x) * r,
                                    cpt.y + (pts[k].y - cpt.y) * r);
-            dl->AddQuadFilled(scaled[0], scaled[1], scaled[2], scaled[3], GetEntityTypeColor(e.type, e.color));
+            dl->AddQuadFilled(scaled[0], scaled[1], scaled[2], scaled[3], ResolveEntityColor(e));
 
             // Selected outline: bright yellow for primary, dimmer for multi-select
             if (IsSelected(world, e.id)) {
@@ -548,21 +548,40 @@ void DrawCanvas(World& world, CanvasView* view) {
                 }
             }
 
-            // Entity marker: per-entity color takes priority; falls back to player-type yellow.
+            // Entity marker: per-entity marker takes priority; falls back to player-type yellow.
             {
-                const uint32_t* mc = GetEntityMarker(e.id);
-                uint32_t col = mc ? *mc
-                             : IsPlayerEntityType(e.type) ? IM_COL32(255, 220, 80, 230)
-                             : 0u;
+                const EntityMarkerData* mc = GetEntityMarker(e.id);
+                uint32_t    col   = mc ? mc->color
+                                  : IsPlayerEntityType(e.type) ? IM_COL32(255, 220, 80, 230)
+                                  : 0u;
+                MarkerShape shape = mc ? mc->shape : MarkerShape::DownTriangle;
                 if (col) {
-                    float ts     = fmaxf(th * 0.35f, 4.f);
-                    float tip_y  = pts[0].y - ts * 0.4f;
-                    float base_y = tip_y - ts * 1.2f;
-                    dl->AddTriangleFilled(
-                        ImVec2(pts[0].x - ts, base_y),
-                        ImVec2(pts[0].x + ts, base_y),
-                        ImVec2(pts[0].x,      tip_y),
-                        col);
+                    float ts  = fmaxf(th * 0.35f, 4.f);
+                    float cx  = pts[0].x;
+                    float cy  = pts[0].y - ts * 1.6f; // center of marker, above entity
+                    switch (shape) {
+                        case MarkerShape::DownTriangle: {
+                            float tip_y = cy + ts * 0.6f, base_y = cy - ts * 0.6f;
+                            dl->AddTriangleFilled(
+                                ImVec2(cx - ts, base_y),
+                                ImVec2(cx + ts, base_y),
+                                ImVec2(cx,      tip_y), col);
+                            break;
+                        }
+                        case MarkerShape::Cross: {
+                            float hw = ts * 0.85f, lw = fmaxf(th * 0.13f, 1.8f);
+                            dl->AddLine(ImVec2(cx - hw, cy), ImVec2(cx + hw, cy), col, lw);
+                            dl->AddLine(ImVec2(cx, cy - hw), ImVec2(cx, cy + hw), col, lw);
+                            break;
+                        }
+                        case MarkerShape::Circle:
+                            dl->AddCircleFilled(ImVec2(cx, cy), ts * 0.75f, col, 16);
+                            break;
+                        case MarkerShape::Ring:
+                            dl->AddCircle(ImVec2(cx, cy), ts * 0.75f, col, 16,
+                                          fmaxf(th * 0.12f, 1.5f));
+                            break;
+                    }
                 }
             }
 

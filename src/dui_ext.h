@@ -42,7 +42,10 @@ const char* GetCellTypeName  (uint8_t type);
 // Per-entity e.color is used as fallback when no type color is registered.
 void     RegisterEntityTypeColor(uint8_t type, uint32_t color);
 // Returns the registered type color, or fallback if none is registered.
-uint32_t GetEntityTypeColor     (uint8_t type, uint32_t fallback = RGBA(180, 180, 180, 220));
+uint32_t GetEntityTypeColor(uint8_t type, uint32_t fallback = RGBA(180, 180, 180, 220));
+// Resolves final display color: e.color wins when explicitly set (differs from
+// the default grey), otherwise falls back to the registered type color.
+uint32_t ResolveEntityColor(const Entity& e);
 
 // Register a display name for a map id value.
 void RegisterMapName(uint32_t map_id, const char* name);
@@ -61,13 +64,22 @@ void InvokeCellDrawer  (Cell& c);
 void SetPlayerEntityType(uint8_t type);
 bool IsPlayerEntityType (uint8_t type);
 
-// Per-entity marker: draw a downward triangle above a specific entity instance.
-// color is ImU32 (IM_COL32). Call ClearEntityMarker to remove.
+// Shapes for per-entity markers drawn above the entity on the canvas.
+enum class MarkerShape {
+    DownTriangle, // default — downward-pointing triangle
+    Cross,        // + cross
+    Circle,       // filled circle
+    Ring,         // circle outline
+};
+
+// Per-entity marker: draw a shape above a specific entity instance.
 // Per-entity marker takes precedence over the player-type marker if both apply.
-void        SetEntityMarker  (uint64_t entity_id, uint32_t color);
-void        ClearEntityMarker(uint64_t entity_id);
+struct EntityMarkerData { uint32_t color; MarkerShape shape; };
+void SetEntityMarker  (uint64_t entity_id, uint32_t color,
+                       MarkerShape shape = MarkerShape::DownTriangle);
+void ClearEntityMarker(uint64_t entity_id);
 // Returns nullptr if no per-entity marker is registered.
-const uint32_t* GetEntityMarker(uint64_t entity_id);
+const EntityMarkerData* GetEntityMarker(uint64_t entity_id);
 
 // Register a function that returns the short text shown above an entity on the Canvas.
 // Returning an empty string hides the label. Unregistered types fall back to e.label.
