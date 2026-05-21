@@ -329,6 +329,19 @@ void RegisterEntityLink(const char* name, EntityTargetFn fn,
                         bool     dashed    = true,
                         bool     arrow     = true);
 
+// ---- Static entity links (direct id-pair) ----
+// Draw a line from entity from_id to entity to_id. Persists until removed.
+// Calling Add again with the same (from_id, to_id) updates the style in-place.
+// ClearEntityLinksById() removes all static links — call at frame start if
+// you rebuild the set every tick.
+void AddEntityLinkById   (uint64_t from_id, uint64_t to_id,
+                          uint32_t color     = RGBA(255, 200, 0, 180),
+                          float    thickness = 1.5f,
+                          bool     dashed    = true,
+                          bool     arrow     = true);
+void RemoveEntityLinkById(uint64_t from_id, uint64_t to_id);
+void ClearEntityLinksById();
+
 // ---- GBK / UTF-8 encoding utility ----
 // Converts a GBK (CP936) string to UTF-8, writes at most out_size bytes.
 // Returns true on success. On non-Windows platforms copies bytes as-is.

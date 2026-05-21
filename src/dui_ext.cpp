@@ -45,6 +45,15 @@ namespace {
     struct EntityLinksEntry { std::string name; dui::EntityLinksFn fn; bool enabled = true; };
     std::vector<EntityLinksEntry> g_entity_links;
 
+    // Static (id-pair) entity links — drawn every frame until removed
+    struct StaticEntityLink {
+        uint64_t from_id, to_id;
+        uint32_t color;
+        float    thickness;
+        bool     dashed, arrow;
+    };
+    std::vector<StaticEntityLink> g_static_entity_links;
+
     // Cell links registry
     struct CellLinksEntry { std::string name; dui::CellLinksFn fn; bool enabled = true; };
     std::vector<CellLinksEntry> g_cell_links;
@@ -343,14 +352,15 @@ void UnregisterEntityLinks(const char* name) {
 }
 
 void InvokeEntityLinks_(const World& world, ImDrawList* dl) {
-    if (g_entity_links.empty()) return;
+    if (g_entity_links.empty() && g_static_entity_links.empty()) return;
 
-    // Build id→entity index for the active map
+    // Build id→entity index for the active map (shared by both link types)
     std::unordered_map<uint64_t, const Entity*> idx;
     idx.reserve(world.entities.size());
     for (const auto& e : world.entities)
         if (e.map_id == world.active_map_id) idx[e.id] = &e;
 
+    // Callback-based links
     for (const auto& e : world.entities) {
         if (e.map_id != world.active_map_id) continue;
         for (const auto& entry : g_entity_links) {
@@ -365,6 +375,17 @@ void InvokeEntityLinks_(const World& world, ImDrawList* dl) {
                 else          DrawLine_ (dl, from, to, lk.color, lk.thickness, lk.dashed);
             }
         }
+    }
+
+    // Static (id-pair) links
+    for (const auto& sl : g_static_entity_links) {
+        auto fit = idx.find(sl.from_id);
+        auto tit = idx.find(sl.to_id);
+        if (fit == idx.end() || tit == idx.end()) continue;
+        ImVec2 from = CanvasToScreen_(fit->second->fx, fit->second->fy);
+        ImVec2 to   = CanvasToScreen_(tit->second->fx, tit->second->fy);
+        if (sl.arrow) DrawArrow_(dl, from, to, sl.color, sl.thickness, sl.dashed);
+        else          DrawLine_ (dl, from, to, sl.color, sl.thickness, sl.dashed);
     }
 }
 
@@ -688,6 +709,31 @@ Entity& Entity::SetName4GBK(const char* gbk) {
 Cell& Cell::SetName4GBK(const char* gbk) {
     GbkToUtf8(gbk, label, sizeof(label));
     return *this;
+}
+
+// ---- Static entity links (id-pair) ----
+
+void AddEntityLinkById(uint64_t from_id, uint64_t to_id,
+                       uint32_t color, float thickness, bool dashed, bool arrow) {
+    for (auto& sl : g_static_entity_links) {
+        if (sl.from_id == from_id && sl.to_id == to_id) {
+            sl.color = color; sl.thickness = thickness;
+            sl.dashed = dashed; sl.arrow = arrow;
+            return;
+        }
+    }
+    g_static_entity_links.push_back({ from_id, to_id, color, thickness, dashed, arrow });
+}
+
+void RemoveEntityLinkById(uint64_t from_id, uint64_t to_id) {
+    auto& v = g_static_entity_links;
+    v.erase(std::remove_if(v.begin(), v.end(), [&](const StaticEntityLink& sl) {
+        return sl.from_id == from_id && sl.to_id == to_id;
+    }), v.end());
+}
+
+void ClearEntityLinksById() {
+    g_static_entity_links.clear();
 }
 
 // ---- Simple entity link (single-target shorthand) ----
