@@ -691,8 +691,11 @@ void DrawCanvas(World& world, CanvasView* view) {
                 } else {
                     SelectClear(world);
                     SelectAdd(world, e.id);
-                    view->cam_x = e.fx;
-                    view->cam_y = e.fy;
+                    // Double-click jumps camera; single-click selects without moving
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                        view->cam_x = e.fx;
+                        view->cam_y = e.fy;
+                    }
                 }
             } else {
                 const auto& c        = world.cells[hits[0].index];

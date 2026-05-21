@@ -11,7 +11,7 @@ struct CanvasView {
     bool show_ents     = true;
     bool show_labels   = true;
     bool show_axis     = true;
-    bool follow_player = true;
+    bool follow_player = false;
     bool show_trails   = false;
     bool show_links    = true;
     bool show_heatmaps = false;
