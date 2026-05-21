@@ -53,6 +53,8 @@ namespace {
         bool     dashed, arrow;
     };
     std::vector<StaticEntityLink> g_static_entity_links;
+    bool g_static_links_enabled = true;
+    static const char* kStaticLinksLayerName = u8"静态连线";
 
     // Cell links registry
     struct CellLinksEntry { std::string name; dui::CellLinksFn fn; bool enabled = true; };
@@ -378,6 +380,7 @@ void InvokeEntityLinks_(const World& world, ImDrawList* dl) {
     }
 
     // Static (id-pair) links
+    if (!g_static_links_enabled) return;
     for (const auto& sl : g_static_entity_links) {
         auto fit = idx.find(sl.from_id);
         auto tit = idx.find(sl.to_id);
@@ -532,6 +535,8 @@ void ListLayers(std::vector<LayerInfo>& out) {
         out.push_back({ "Heatmap", h.name.c_str(), h.enabled });
     for (const auto& l : g_entity_links)
         out.push_back({ "EntityLinks", l.name.c_str(), l.enabled });
+    if (!g_static_entity_links.empty())
+        out.push_back({ "EntityLinks", kStaticLinksLayerName, g_static_links_enabled });
     for (const auto& l : g_cell_links)
         out.push_back({ "CellLinks", l.name.c_str(), l.enabled });
     for (const auto& kv : g_entity_overlays) {
@@ -565,6 +570,7 @@ void SetLayerEnabled(const char* kind, const char* name, bool on) {
         for (auto& h : g_heatmaps)
             if (h.name == name) { h.enabled = on; return; }
     } else if (std::strcmp(kind, "EntityLinks") == 0) {
+        if (std::strcmp(name, kStaticLinksLayerName) == 0) { g_static_links_enabled = on; return; }
         for (auto& l : g_entity_links)
             if (l.name == name) { l.enabled = on; return; }
     } else if (std::strcmp(kind, "CellLinks") == 0) {
