@@ -74,6 +74,7 @@ void UnregisterCommand(const char* name) {
         if (it->name == name) { g_cmds.erase(it); return; }
     }
 }
+void ClearCommands() { g_cmds.clear(); g_cmds_args.clear(); }
 
 void ExecuteCommand(const char* name) {
     if (!name) return;

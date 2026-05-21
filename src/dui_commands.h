@@ -12,6 +12,7 @@ using CommandFn = std::function<void()>;
 // Registering the same name again overwrites the previous handler.
 void RegisterCommand  (const char* name, CommandFn fn);
 void UnregisterCommand(const char* name);
+void ClearCommands();
 
 // Execute a command by name (used by hotkey system). No-op if name not found.
 void ExecuteCommand(const char* name);

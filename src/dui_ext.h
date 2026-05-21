@@ -17,14 +17,22 @@ using EntityDrawer = std::function<void(Entity&)>;
 using CellDrawer   = std::function<void(Cell&)>;
 
 // Register a drawer for a specific entity/cell type (overwrites any previous one).
-void RegisterEntityDrawer(uint8_t type, EntityDrawer drawer);
-void RegisterCellDrawer  (uint8_t type, CellDrawer   drawer);
+void RegisterEntityDrawer  (uint8_t type, EntityDrawer drawer);
+void UnregisterEntityDrawer(uint8_t type);
+void ClearEntityDrawers();
+void RegisterCellDrawer    (uint8_t type, CellDrawer   drawer);
+void UnregisterCellDrawer  (uint8_t type);
+void ClearCellDrawers();
 
 // Register a display name for an entity/cell type value.
 // The Inspector will show the name wherever it previously showed the raw number.
 // Affects: type column, filter combo, group headers, detail pane, and search.
-void RegisterEntityTypeName(uint8_t type, const char* name);
-void RegisterCellTypeName  (uint8_t type, const char* name);
+void RegisterEntityTypeName  (uint8_t type, const char* name);
+void UnregisterEntityTypeName(uint8_t type);
+void ClearEntityTypeNames();
+void RegisterCellTypeName    (uint8_t type, const char* name);
+void UnregisterCellTypeName  (uint8_t type);
+void ClearCellTypeNames();
 
 // Bulk registration overloads — equivalent to calling the single-item versions in order.
 // Usage: RegisterEntityTypeNames({{0, u8"主角"}, {1, u8"战士"}, {2, u8"法师"}});
@@ -40,7 +48,9 @@ const char* GetCellTypeName  (uint8_t type);
 // Applies automatically when SpawnEntityAt is called.
 // Also used by Canvas and Inspector to colorize entities by type.
 // Per-entity e.color is used as fallback when no type color is registered.
-void     RegisterEntityTypeColor(uint8_t type, uint32_t color);
+void     RegisterEntityTypeColor  (uint8_t type, uint32_t color);
+void     UnregisterEntityTypeColor(uint8_t type);
+void     ClearEntityTypeColors();
 // Returns the registered type color, or fallback if none is registered.
 uint32_t GetEntityTypeColor(uint8_t type, uint32_t fallback = RGBA(180, 180, 180, 220));
 // Resolves final display color: e.color wins when explicitly set (differs from
@@ -48,7 +58,9 @@ uint32_t GetEntityTypeColor(uint8_t type, uint32_t fallback = RGBA(180, 180, 180
 uint32_t ResolveEntityColor(const Entity& e);
 
 // Register a display name for a map id value.
-void RegisterMapName(uint32_t map_id, const char* name);
+void RegisterMapName  (uint32_t map_id, const char* name);
+void UnregisterMapName(uint32_t map_id);
+void ClearMapNames();
 const char* GetMapName(uint32_t map_id);   // nullptr if not registered
 
 // Switch the active map: updates active_map_id, clears cell selection,
@@ -61,8 +73,9 @@ void InvokeEntityDrawer(Entity& e);
 void InvokeCellDrawer  (Cell& c);
 
 // Mark a entity type as "player" — Canvas draws a yellow triangle above all matching entities.
-void SetPlayerEntityType(uint8_t type);
-bool IsPlayerEntityType (uint8_t type);
+void SetPlayerEntityType  (uint8_t type);
+void ClearPlayerEntityType();
+bool IsPlayerEntityType   (uint8_t type);
 
 // Shapes for per-entity markers drawn above the entity on the canvas.
 enum class MarkerShape {
@@ -77,14 +90,17 @@ enum class MarkerShape {
 struct EntityMarkerData { uint32_t color; MarkerShape shape; };
 void SetEntityMarker  (uint64_t entity_id, uint32_t color,
                        MarkerShape shape = MarkerShape::DownTriangle);
-void ClearEntityMarker(uint64_t entity_id);
+void ClearEntityMarker   (uint64_t entity_id);
+void ClearAllEntityMarkers();
 // Returns nullptr if no per-entity marker is registered.
 const EntityMarkerData* GetEntityMarker(uint64_t entity_id);
 
 // Register a function that returns the short text shown above an entity on the Canvas.
 // Returning an empty string hides the label. Unregistered types fall back to e.label.
 using EntityLabelFn = std::function<std::string(const Entity&)>;
-void        RegisterEntityLabelFn(uint8_t type, EntityLabelFn fn);
+void        RegisterEntityLabelFn  (uint8_t type, EntityLabelFn fn);
+void        UnregisterEntityLabelFn(uint8_t type);
+void        ClearEntityLabelFns();
 std::string InvokeEntityLabel    (const Entity& e);
 
 // ---- Canvas Overlay API ----
@@ -169,19 +185,24 @@ using EntityOverlayFn = std::function<void(const Entity&, const CanvasOverlayCtx
 using GlobalOverlayFn = std::function<void(const World&,  const CanvasOverlayCtx&)>;
 
 // Per-type overlay: called once per entity of that type each frame.
-void RegisterEntityOverlay(uint8_t type, EntityOverlayFn fn);
+void RegisterEntityOverlay  (uint8_t type, EntityOverlayFn fn);
+void UnregisterEntityOverlay(uint8_t type);
+void ClearEntityOverlays();
 
 // World-level overlay: called once per frame regardless of entity type.
 // name is used for deduplication (registering again with same name overwrites).
 void RegisterGlobalOverlay  (const char* name, GlobalOverlayFn fn);
 void UnregisterGlobalOverlay(const char* name);
+void ClearGlobalOverlays();
 
 // ---- Cell Overlay API ----
 // Mirrors RegisterEntityOverlay: per cell-type callback drawn after cells are filled.
 
 using CellOverlayFn = std::function<void(const Cell&, const CanvasOverlayCtx&)>;
 
-void RegisterCellOverlay(uint8_t type, CellOverlayFn fn);
+void RegisterCellOverlay  (uint8_t type, CellOverlayFn fn);
+void UnregisterCellOverlay(uint8_t type);
+void ClearCellOverlays();
 
 // ---- Cell Heatmap API ----
 // Overlays a color gradient on every tile in the visible viewport,
@@ -200,6 +221,7 @@ using CellValueFn = std::function<float(int x, int y)>;
 
 void RegisterCellHeatmap  (const char* name, CellValueFn fn, HeatmapOpts opts = {});
 void UnregisterCellHeatmap(const char* name);
+void ClearCellHeatmaps();
 
 // ---- Entity Links API ----
 // Draw directed lines between entities (e.g. target, threat, leader→follower).
@@ -217,6 +239,7 @@ using EntityLinksFn = std::function<std::vector<EntityLink>(const Entity&)>;
 
 void RegisterEntityLinks  (const char* name, EntityLinksFn fn);
 void UnregisterEntityLinks(const char* name);
+void ClearEntityLinks();
 
 // ---- Cell Links API ----
 // Symmetric to RegisterEntityLinks: draw directed connectors between cells.
@@ -230,6 +253,7 @@ struct CellLink {
 using CellLinksFn = std::function<std::vector<CellLink>(const Cell&)>;
 void RegisterCellLinks  (const char* name, CellLinksFn fn);
 void UnregisterCellLinks(const char* name);
+void ClearCellLinks();
 
 // ---- Canvas Context Menu API ----
 // Right-click on an entity/cell/background opens a registered context menu.
@@ -248,7 +272,9 @@ void RegisterEntityContextMenu(uint8_t type, EntityContextMenuFn fn);
 void RegisterCellContextMenu  (uint8_t type, CellContextMenuFn   fn);
 void RegisterCanvasBackgroundContextMenu(BgContextMenuFn fn);
 void UnregisterEntityContextMenu(uint8_t type);
+void ClearEntityContextMenus();
 void UnregisterCellContextMenu  (uint8_t type);
+void ClearCellContextMenus();
 void UnregisterCanvasBackgroundContextMenu();
 
 // ---- World modification helpers ----
@@ -303,6 +329,7 @@ using PanelDrawFn = std::function<void()>;
 void RegisterPanel  (const char* window_title, PanelDrawFn draw_fn,
                      PanelDock initial_dock = PanelDock::Bottom);
 void UnregisterPanel(const char* window_title);
+void ClearPanels();
 
 void InvokeUserPanels_();                                 // called by DrawAll
 void DockUserPanels_(ImGuiID center, ImGuiID left,

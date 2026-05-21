@@ -9,6 +9,7 @@ namespace dui {
 // Registering the same (key, mods) pair again overwrites the previous binding.
 void BindHotkey  (ImGuiKey key, int mods, const char* command_name);
 void UnbindHotkey(ImGuiKey key, int mods);
+void ClearHotkeys();
 
 // Returns a display string like "[F5]" or "[Ctrl+R]" for the first binding of this command.
 // Returns empty string if no binding exists.

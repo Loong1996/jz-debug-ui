@@ -53,6 +53,7 @@ void BindHotkey(ImGuiKey key, int mods, const char* command_name) {
     SaveHotkeys();
 }
 
+void ClearHotkeys() { s_bindings.clear(); SaveHotkeys(); }
 void UnbindHotkey(ImGuiKey key, int mods) {
     for (auto it = s_bindings.begin(); it != s_bindings.end(); ++it) {
         if (it->key == key && it->mods == mods) {

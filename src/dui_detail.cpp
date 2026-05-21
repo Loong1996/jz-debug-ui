@@ -27,6 +27,13 @@ void RegisterEntityDetailText(uint8_t type, EntityDetailBuilderFn fn) {
     g_text_fns.erase(type);
     g_builder_fns[type] = std::move(fn);
 }
+void UnregisterEntityDetailText(uint8_t type) {
+    g_text_fns.erase(type); g_builder_fns.erase(type);
+}
+void ClearEntityDetailTexts() {
+    g_text_fns.clear(); g_builder_fns.clear();
+    g_id_text_fns.clear(); g_id_builder_fns.clear();
+}
 void RegisterEntityDetailTextById(uint64_t id, EntityDetailTextFn fn) {
     g_id_builder_fns.erase(id);
     g_id_text_fns[id] = std::move(fn);
@@ -34,6 +41,9 @@ void RegisterEntityDetailTextById(uint64_t id, EntityDetailTextFn fn) {
 void RegisterEntityDetailTextById(uint64_t id, EntityDetailBuilderFn fn) {
     g_id_text_fns.erase(id);
     g_id_builder_fns[id] = std::move(fn);
+}
+void UnregisterEntityDetailTextById(uint64_t id) {
+    g_id_text_fns.erase(id); g_id_builder_fns.erase(id);
 }
 
 std::string InvokeEntityDetailText(const Entity& e) {
@@ -65,6 +75,10 @@ void RegisterCellDetailText(uint8_t type, CellDetailBuilderFn fn) {
     g_cell_text_fns.erase(type);
     g_cell_builder_fns[type] = std::move(fn);
 }
+void UnregisterCellDetailText(uint8_t type) {
+    g_cell_text_fns.erase(type); g_cell_builder_fns.erase(type);
+}
+void ClearCellDetailTexts() { g_cell_text_fns.clear(); g_cell_builder_fns.clear(); }
 
 std::string InvokeCellDetailText(const Cell& c) {
     auto it = g_cell_text_fns.find(c.type);
@@ -88,9 +102,13 @@ bool InvokeCellDetailText_(const Cell& c) {
 void RegisterEntityEditor(uint8_t type, EntityEditFn fn) {
     g_entity_editors[type] = std::move(fn);
 }
+void UnregisterEntityEditor(uint8_t type) { g_entity_editors.erase(type); }
+void ClearEntityEditors()                { g_entity_editors.clear(); }
 void RegisterCellEditor(uint8_t type, CellEditFn fn) {
     g_cell_editors[type] = std::move(fn);
 }
+void UnregisterCellEditor(uint8_t type) { g_cell_editors.erase(type); }
+void ClearCellEditors()                 { g_cell_editors.clear(); }
 
 bool InvokeEntityEditor_(Entity& e) {
     auto it = g_entity_editors.find(e.type);

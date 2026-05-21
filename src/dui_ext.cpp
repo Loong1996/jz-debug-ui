@@ -129,21 +129,20 @@ namespace {
 
 namespace dui {
 
-void RegisterEntityDrawer(uint8_t type, EntityDrawer drawer) {
-    g_entity_drawers[type] = std::move(drawer);
-}
+void RegisterEntityDrawer  (uint8_t type, EntityDrawer drawer) { g_entity_drawers[type] = std::move(drawer); }
+void UnregisterEntityDrawer(uint8_t type)                      { g_entity_drawers.erase(type); }
+void ClearEntityDrawers   ()                                   { g_entity_drawers.clear(); }
+void RegisterCellDrawer    (uint8_t type, CellDrawer   drawer) { g_cell_drawers[type]   = std::move(drawer); }
+void UnregisterCellDrawer  (uint8_t type)                      { g_cell_drawers.erase(type); }
+void ClearCellDrawers      ()                                  { g_cell_drawers.clear(); }
 
-void RegisterCellDrawer(uint8_t type, CellDrawer drawer) {
-    g_cell_drawers[type] = std::move(drawer);
-}
+void RegisterEntityTypeName  (uint8_t type, const char* name) { g_entity_type_names[type] = name ? name : ""; }
+void UnregisterEntityTypeName(uint8_t type)                   { g_entity_type_names.erase(type); }
+void ClearEntityTypeNames    ()                               { g_entity_type_names.clear(); }
 
-void RegisterEntityTypeName(uint8_t type, const char* name) {
-    g_entity_type_names[type] = name ? name : "";
-}
-
-void RegisterEntityTypeColor(uint8_t type, uint32_t color) {
-    g_entity_type_colors[type] = color;
-}
+void RegisterEntityTypeColor  (uint8_t type, uint32_t color) { g_entity_type_colors[type] = color; }
+void UnregisterEntityTypeColor(uint8_t type)                 { g_entity_type_colors.erase(type); }
+void ClearEntityTypeColors    ()                             { g_entity_type_colors.clear(); }
 
 uint32_t GetEntityTypeColor(uint8_t type, uint32_t fallback) {
     auto it = g_entity_type_colors.find(type);
@@ -156,9 +155,9 @@ uint32_t ResolveEntityColor(const Entity& e) {
     auto it = g_entity_type_colors.find(e.type);
     return it != g_entity_type_colors.end() ? it->second : e.color;
 }
-void RegisterCellTypeName(uint8_t type, const char* name) {
-    g_cell_type_names[type] = name ? name : "";
-}
+void RegisterCellTypeName  (uint8_t type, const char* name) { g_cell_type_names[type] = name ? name : ""; }
+void UnregisterCellTypeName(uint8_t type)                   { g_cell_type_names.erase(type); }
+void ClearCellTypeNames    ()                               { g_cell_type_names.clear(); }
 const char* GetEntityTypeName(uint8_t type) {
     auto it = g_entity_type_names.find(type);
     return it != g_entity_type_names.end() ? it->second.c_str() : nullptr;
@@ -168,9 +167,9 @@ const char* GetCellTypeName(uint8_t type) {
     return it != g_cell_type_names.end() ? it->second.c_str() : nullptr;
 }
 
-void RegisterMapName(uint32_t map_id, const char* name) {
-    g_map_names[map_id] = name ? name : "";
-}
+void RegisterMapName  (uint32_t map_id, const char* name) { g_map_names[map_id] = name ? name : ""; }
+void UnregisterMapName(uint32_t map_id)                   { g_map_names.erase(map_id); }
+void ClearMapNames    ()                                  { g_map_names.clear(); }
 
 void RegisterEntityTypeNames(std::initializer_list<std::pair<uint8_t, const char*>> entries) {
     for (const auto& p : entries) RegisterEntityTypeName(p.first, p.second);
@@ -213,12 +212,13 @@ void InvokeCellDrawer(Cell& c) {
     it->second(c);
 }
 
-void SetPlayerEntityType(uint8_t type) { g_player_entity_type = type; g_player_type_set = true; }
-bool IsPlayerEntityType (uint8_t type) { return g_player_type_set && type == g_player_entity_type; }
+void SetPlayerEntityType  (uint8_t type) { g_player_entity_type = type; g_player_type_set = true; }
+void ClearPlayerEntityType()            { g_player_type_set = false; }
+bool IsPlayerEntityType   (uint8_t type) { return g_player_type_set && type == g_player_entity_type; }
 
-void RegisterEntityLabelFn(uint8_t type, EntityLabelFn fn) {
-    g_label_fns[type] = std::move(fn);
-}
+void RegisterEntityLabelFn  (uint8_t type, EntityLabelFn fn) { g_label_fns[type] = std::move(fn); }
+void UnregisterEntityLabelFn(uint8_t type)                   { g_label_fns.erase(type); }
+void ClearEntityLabelFns   ()                                { g_label_fns.clear(); }
 
 std::string InvokeEntityLabel(const Entity& e) {
     auto it = g_label_fns.find(e.type);
@@ -229,17 +229,16 @@ std::string InvokeEntityLabel(const Entity& e) {
 void SetEntityMarker(uint64_t entity_id, uint32_t color, MarkerShape shape) {
     g_entity_markers[entity_id] = { color, shape };
 }
-void ClearEntityMarker(uint64_t entity_id) {
-    g_entity_markers.erase(entity_id);
-}
+void ClearEntityMarker   (uint64_t entity_id) { g_entity_markers.erase(entity_id); }
+void ClearAllEntityMarkers()                  { g_entity_markers.clear(); }
 const EntityMarkerData* GetEntityMarker(uint64_t entity_id) {
     auto it = g_entity_markers.find(entity_id);
     return it != g_entity_markers.end() ? &it->second : nullptr;
 }
 
-void RegisterEntityOverlay(uint8_t type, EntityOverlayFn fn) {
-    g_entity_overlays[type] = std::move(fn);
-}
+void RegisterEntityOverlay  (uint8_t type, EntityOverlayFn fn) { g_entity_overlays[type] = std::move(fn); }
+void UnregisterEntityOverlay(uint8_t type)                     { g_entity_overlays.erase(type); g_entity_overlay_enabled.erase(type); }
+void ClearEntityOverlays   ()                                  { g_entity_overlays.clear(); g_entity_overlay_enabled.clear(); }
 
 void RegisterGlobalOverlay(const char* name, GlobalOverlayFn fn) {
     if (!name) return;
@@ -249,6 +248,7 @@ void RegisterGlobalOverlay(const char* name, GlobalOverlayFn fn) {
     g_global_overlays.push_back({ std::string(name), std::move(fn) });
 }
 
+void ClearGlobalOverlays() { g_global_overlays.clear(); }
 void UnregisterGlobalOverlay(const char* name) {
     if (!name) return;
     for (auto it = g_global_overlays.begin(); it != g_global_overlays.end(); ++it) {
@@ -285,9 +285,9 @@ void InvokeGlobalOverlays_(const World& world, ImDrawList* dl) {
 
 // ---- Cell overlay ----
 
-void RegisterCellOverlay(uint8_t type, CellOverlayFn fn) {
-    g_cell_overlays[type] = std::move(fn);
-}
+void RegisterCellOverlay  (uint8_t type, CellOverlayFn fn) { g_cell_overlays[type] = std::move(fn); }
+void UnregisterCellOverlay(uint8_t type)                    { g_cell_overlays.erase(type); g_cell_overlay_enabled.erase(type); }
+void ClearCellOverlays   ()                                 { g_cell_overlays.clear(); g_cell_overlay_enabled.clear(); }
 
 void InvokeCellOverlays_(const World& world, const Cell& c, ImDrawList* dl) {
     auto it = g_cell_overlays.find(c.type);
@@ -308,6 +308,7 @@ void RegisterCellHeatmap(const char* name, CellValueFn fn, HeatmapOpts opts) {
     g_heatmaps.push_back({ std::string(name), std::move(fn), opts });
 }
 
+void ClearCellHeatmaps() { g_heatmaps.clear(); }
 void UnregisterCellHeatmap(const char* name) {
     if (!name) return;
     for (auto it = g_heatmaps.begin(); it != g_heatmaps.end(); ++it) {
@@ -363,6 +364,7 @@ void RegisterEntityLinks(const char* name, EntityLinksFn fn) {
     g_entity_links.push_back({ std::string(name), std::move(fn) });
 }
 
+void ClearEntityLinks() { g_entity_links.clear(); }
 void UnregisterEntityLinks(const char* name) {
     if (!name) return;
     for (auto it = g_entity_links.begin(); it != g_entity_links.end(); ++it) {
@@ -419,6 +421,7 @@ void RegisterPanel(const char* window_title, PanelDrawFn draw_fn, PanelDock dock
     g_panels.push_back({ std::string(window_title), std::move(draw_fn), dock });
 }
 
+void ClearPanels() { g_panels.clear(); }
 void UnregisterPanel(const char* window_title) {
     if (!window_title) return;
     for (auto it = g_panels.begin(); it != g_panels.end(); ++it) {
@@ -518,6 +521,7 @@ void RegisterCellLinks(const char* name, CellLinksFn fn) {
     g_cell_links.push_back({ std::string(name), std::move(fn) });
 }
 
+void ClearCellLinks() { g_cell_links.clear(); }
 void UnregisterCellLinks(const char* name) {
     if (!name) return;
     for (auto it = g_cell_links.begin(); it != g_cell_links.end(); ++it) {
@@ -622,7 +626,9 @@ void RegisterCanvasBackgroundContextMenu(BgContextMenuFn fn) {
     g_bg_ctx_menu = std::move(fn);
 }
 void UnregisterEntityContextMenu(uint8_t type) { g_entity_ctx_menus.erase(type); }
+void ClearEntityContextMenus   ()              { g_entity_ctx_menus.clear(); }
 void UnregisterCellContextMenu  (uint8_t type) { g_cell_ctx_menus.erase(type); }
+void ClearCellContextMenus     ()              { g_cell_ctx_menus.clear(); }
 void UnregisterCanvasBackgroundContextMenu()   { g_bg_ctx_menu = nullptr; }
 
 bool HasEntityContextMenu_(uint8_t type) { return g_entity_ctx_menus.count(type) > 0; }

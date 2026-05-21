@@ -44,10 +44,13 @@ private:
 using EntityDetailTextFn    = std::function<std::string(const Entity&)>;
 using EntityDetailBuilderFn = std::function<void(const Entity&, DetailBuilder&)>;
 
-void RegisterEntityDetailText   (uint8_t  type, EntityDetailTextFn    fn);
-void RegisterEntityDetailText   (uint8_t  type, EntityDetailBuilderFn fn);
-void RegisterEntityDetailTextById(uint64_t id,  EntityDetailTextFn    fn);
-void RegisterEntityDetailTextById(uint64_t id,  EntityDetailBuilderFn fn);
+void RegisterEntityDetailText    (uint8_t  type, EntityDetailTextFn    fn);
+void RegisterEntityDetailText    (uint8_t  type, EntityDetailBuilderFn fn);
+void UnregisterEntityDetailText  (uint8_t  type);
+void ClearEntityDetailTexts();                     // clears all type + id registrations
+void RegisterEntityDetailTextById (uint64_t id,  EntityDetailTextFn    fn);
+void RegisterEntityDetailTextById (uint64_t id,  EntityDetailBuilderFn fn);
+void UnregisterEntityDetailTextById(uint64_t id);
 
 std::string InvokeEntityDetailText(const Entity& e);
 
@@ -55,8 +58,10 @@ std::string InvokeEntityDetailText(const Entity& e);
 using CellDetailTextFn    = std::function<std::string(const Cell&)>;
 using CellDetailBuilderFn = std::function<void(const Cell&, DetailBuilder&)>;
 
-void RegisterCellDetailText(uint8_t type, CellDetailTextFn    fn);
-void RegisterCellDetailText(uint8_t type, CellDetailBuilderFn fn);
+void RegisterCellDetailText  (uint8_t type, CellDetailTextFn    fn);
+void RegisterCellDetailText  (uint8_t type, CellDetailBuilderFn fn);
+void UnregisterCellDetailText(uint8_t type);
+void ClearCellDetailTexts();
 
 std::string InvokeCellDetailText(const Cell& c);
 
@@ -64,8 +69,12 @@ std::string InvokeCellDetailText(const Cell& c);
 using EntityEditFn = std::function<void(Entity&)>;
 using CellEditFn   = std::function<void(Cell&)>;
 
-void RegisterEntityEditor(uint8_t type, EntityEditFn fn);
-void RegisterCellEditor  (uint8_t type, CellEditFn   fn);
+void RegisterEntityEditor  (uint8_t type, EntityEditFn fn);
+void UnregisterEntityEditor(uint8_t type);
+void ClearEntityEditors();
+void RegisterCellEditor    (uint8_t type, CellEditFn   fn);
+void UnregisterCellEditor  (uint8_t type);
+void ClearCellEditors();
 
 // Internal — called by DrawEntityDetail and Inspector cell section.
 bool InvokeCellDetailText_(const Cell& c);   // returns true if text was non-empty
