@@ -32,6 +32,12 @@ struct Metrics {
     RingBuffer<float, 300> entity_count;
 };
 
+// Built-in tick_ms / entity_count line plots + user metric curves
+// (ConfigureMetric / Push) + Tunable controls.
 void DrawMetrics(const Metrics& m);
+
+// Variant for projects that don't manage a Metrics instance. The panel still
+// shows user metric curves and Tunable controls; built-in plots are skipped.
+void DrawMetrics();
 
 } // namespace dui

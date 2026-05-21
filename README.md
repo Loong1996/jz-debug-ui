@@ -43,11 +43,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::App app;
     app.Init(1280, 720, L"Game Debug");
 
-    dui::World   world;    // 每帧从游戏状态填充
-    dui::Metrics metrics;
+    dui::World world;    // 每帧从游戏状态填充
 
     while (app.Tick([&]() {
-        dui::DrawAll(world, metrics);
+        dui::DrawAll(world);
     })) {
         // 游戏逻辑 / 填充 world ...
         dui::Watch("entity_count", (int)world.entities.size());
@@ -56,6 +55,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 ```
 
 `App::Tick` 会自动处理消息循环、帧开始/结束，以及首次启动时的默认停靠布局（左 Inspector / 中 Canvas / 右 Detail / 底部日志组）。布局会通过 `debug_ui.ini` 持久化，用户拖拽调整后下次打开保持不变。
+
+> 想用内置的 **帧耗时 / 实体数** 折线图，再传一个 `dui::Metrics`：
+> ```cpp
+> dui::Metrics metrics;
+> // 每帧 push：metrics.tick_ms.push(ms); metrics.entity_count.push((float)n);
+> dui::DrawAll(world, metrics);
+> ```
+> 自定义曲线（`ConfigureMetric` / `Push`）和 `Tunable` 滑条不依赖 Metrics，无论哪种 DrawAll 重载都会显示。
 
 ---
 
@@ -91,9 +98,9 @@ Debug 配置同理再导入一次（`.props` 自动按 `$(Configuration)` 找对
 #include "dui_draw_all.h"
 
 // 全局或管理器成员
-dui::App     g_dui;
-dui::World   g_dui_world;
-dui::Metrics g_dui_metrics;
+dui::App   g_dui;
+dui::World g_dui_world;
+// dui::Metrics g_dui_metrics;  // 想要内置帧耗时/实体数曲线时再加
 
 // 游戏启动时
 g_dui.Init(1280, 720, L"Game Debug");
@@ -116,7 +123,8 @@ void Game::Tick(float dt) {
 
     // 驱动调试窗口（独立 OS 窗口，不干扰游戏窗口）
     g_dui.Tick([&]() {
-        dui::DrawAll(g_dui_world, g_dui_metrics);
+        dui::DrawAll(g_dui_world);
+        // 想要内置帧耗时/实体数图：dui::DrawAll(g_dui_world, g_dui_metrics);
     });
 }
 ```
@@ -400,14 +408,17 @@ dui::DrawEntityDetail(world);
 ### Metrics DrawMetrics
 
 ```cpp
+// 不需要内置图就用无参重载，面板里只显示用户自定义曲线 + Tunable
+dui::DrawMetrics();
+
+// 需要内置帧耗时 / 实体数滚动折线时（最近 300 帧）：
 dui::Metrics metrics;
 metrics.tick_ms.push(tick_duration_ms);
 metrics.entity_count.push((float)world.entities.size());
-
 dui::DrawMetrics(metrics);
 ```
 
-显示 tick 耗时和实体数量的滚动折线图（最近 300 帧）。
+`DrawMetrics()` 无参版本和 `DrawAll(world)` 配合，免去管理 `Metrics` 对象。
 
 ### 日志 DrawLog
 

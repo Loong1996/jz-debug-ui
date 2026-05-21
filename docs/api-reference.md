@@ -282,6 +282,16 @@ bool EveryNSeconds(float interval, float dt, float& acc);
 ## 指标图（Metrics）
 
 ```cpp
+// 内置图（可选）：每帧 push 帧耗时和实体数
+struct Metrics { RingBuffer<float, 300> tick_ms, entity_count; };
+
+// 三种调用方式：
+DrawAll(world);                  // 不需要内置图，性能指标面板只显示用户曲线
+DrawAll(world, metrics);         // 同上 + 内置 tick_ms / entity_count 折线
+DrawMetrics();                   // 单独绘制（无内置图）
+DrawMetrics(metrics);            // 单独绘制（含内置图）
+
+// 用户自定义曲线（与 Metrics 无关，独立显示在性能指标面板里）
 Metric h = ConfigureMetric("ai/decision_ms", {
     .unit       = "ms",
     .y_min      = 0.f, .y_max = 50.f,  // 0==0 → 自动适应

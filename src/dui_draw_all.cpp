@@ -15,13 +15,15 @@
 #include "dui_layers.h"
 
 namespace dui {
+namespace {
 
-void DrawAll(World& world, Metrics& metrics) {
+void DrawAllImpl(World& world, const Metrics* metrics) {
     CaptureReplayFrame_(world);
     DrawMenuBar();
     DrawInspector(world);
     DrawCanvas(world);
-    DrawMetrics(metrics);
+    if (metrics) DrawMetrics(*metrics);
+    else         DrawMetrics();
     DrawLog();
     DrawWatch();
     DrawCommands();
@@ -34,5 +36,10 @@ void DrawAll(World& world, Metrics& metrics) {
     DrawMinimap(world);
     DrawLayerPanel(world);
 }
+
+} // namespace
+
+void DrawAll(World& world)                   { DrawAllImpl(world, nullptr); }
+void DrawAll(World& world, Metrics& metrics) { DrawAllImpl(world, &metrics); }
 
 } // namespace dui
