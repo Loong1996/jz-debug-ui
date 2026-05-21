@@ -44,8 +44,10 @@ private:
 using EntityDetailTextFn    = std::function<std::string(const Entity&)>;
 using EntityDetailBuilderFn = std::function<void(const Entity&, DetailBuilder&)>;
 
-void RegisterEntityDetailText(uint8_t type, EntityDetailTextFn    fn);
-void RegisterEntityDetailText(uint8_t type, EntityDetailBuilderFn fn);
+void RegisterEntityDetailText   (uint8_t  type, EntityDetailTextFn    fn);
+void RegisterEntityDetailText   (uint8_t  type, EntityDetailBuilderFn fn);
+void RegisterEntityDetailTextById(uint64_t id,  EntityDetailTextFn    fn);
+void RegisterEntityDetailTextById(uint64_t id,  EntityDetailBuilderFn fn);
 
 std::string InvokeEntityDetailText(const Entity& e);
 

@@ -7,12 +7,14 @@
 #include <unordered_map>
 
 namespace {
-    std::unordered_map<uint8_t, dui::EntityDetailTextFn>    g_text_fns;
-    std::unordered_map<uint8_t, dui::EntityDetailBuilderFn> g_builder_fns;
-    std::unordered_map<uint8_t, dui::CellDetailTextFn>      g_cell_text_fns;
-    std::unordered_map<uint8_t, dui::CellDetailBuilderFn>   g_cell_builder_fns;
-    std::unordered_map<uint8_t, dui::EntityEditFn>          g_entity_editors;
-    std::unordered_map<uint8_t, dui::CellEditFn>            g_cell_editors;
+    std::unordered_map<uint8_t,  dui::EntityDetailTextFn>    g_text_fns;
+    std::unordered_map<uint8_t,  dui::EntityDetailBuilderFn> g_builder_fns;
+    std::unordered_map<uint64_t, dui::EntityDetailTextFn>    g_id_text_fns;
+    std::unordered_map<uint64_t, dui::EntityDetailBuilderFn> g_id_builder_fns;
+    std::unordered_map<uint8_t,  dui::CellDetailTextFn>      g_cell_text_fns;
+    std::unordered_map<uint8_t,  dui::CellDetailBuilderFn>   g_cell_builder_fns;
+    std::unordered_map<uint8_t,  dui::EntityEditFn>          g_entity_editors;
+    std::unordered_map<uint8_t,  dui::CellEditFn>            g_cell_editors;
 }
 
 namespace dui {
@@ -25,8 +27,25 @@ void RegisterEntityDetailText(uint8_t type, EntityDetailBuilderFn fn) {
     g_text_fns.erase(type);
     g_builder_fns[type] = std::move(fn);
 }
+void RegisterEntityDetailTextById(uint64_t id, EntityDetailTextFn fn) {
+    g_id_builder_fns.erase(id);
+    g_id_text_fns[id] = std::move(fn);
+}
+void RegisterEntityDetailTextById(uint64_t id, EntityDetailBuilderFn fn) {
+    g_id_text_fns.erase(id);
+    g_id_builder_fns[id] = std::move(fn);
+}
 
 std::string InvokeEntityDetailText(const Entity& e) {
+    // Per-ID takes priority over per-type
+    auto iit = g_id_text_fns.find(e.id);
+    if (iit != g_id_text_fns.end()) return iit->second(e);
+    auto iib = g_id_builder_fns.find(e.id);
+    if (iib != g_id_builder_fns.end()) {
+        DetailBuilder db;
+        iib->second(e, db);
+        return db.Take();
+    }
     auto it = g_text_fns.find(e.type);
     if (it != g_text_fns.end()) return it->second(e);
     auto ib = g_builder_fns.find(e.type);
