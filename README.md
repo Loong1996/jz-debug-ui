@@ -22,6 +22,8 @@
   - [日志 DrawLog](#日志-drawlog)
   - [监视 DrawWatch](#监视-drawwatch)
   - [命令面板 DrawCommands](#命令面板-drawcommands)
+  - [其余内置面板](#其余内置面板)
+- [调试深水区（Round 6 / Round 7）](#调试深水区round-6--round-7)
 - [扩展点](#扩展点)
   - [Entity / Cell 自定义字段](#entitycell-自定义字段)
   - [命令注册](#命令注册)
@@ -290,13 +292,15 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 ```cpp
 struct World {
-    std::vector<Entity> entities;
-    std::vector<Cell>   cells;        // 地图格子层（在 Entity 下面渲染）
-    int  selected_id    = -1;         // 当前选中的实体 id，-1 表示无
-    int  player_id      = -1;         // 主角实体 id，用于相机跟随
-    bool sel_cell_valid = false;
-    int  sel_cell_x     = 0;
-    int  sel_cell_y     = 0;
+    std::vector<Entity>   entities;
+    std::vector<Cell>     cells;         // 地图格子层（在 Entity 下面渲染）
+    uint32_t active_map_id = 0;          // 当前活动地图（多地图场景用）
+    uint64_t selected_id   = 0;          // 主选中实体 id（0 = 无）
+    uint64_t player_id     = 0;          // 主角实体 id，用于相机跟随
+    bool     sel_cell_valid = false;
+    int      sel_cell_x     = 0;
+    int      sel_cell_y     = 0;
+    std::vector<uint64_t> selected_ids;  // 多选集合（始终包含 selected_id）
 };
 ```
 
@@ -305,16 +309,19 @@ struct World {
 ```cpp
 struct Entity {
     uint64_t id;
-    int      x, y;               // 网格整数坐标（驱动渲染）
-    float    fx, fy;             // 浮点坐标（可用 roundf 驱动 x/y）
+    uint32_t map_id;             // 所属地图
+    int      x, y;               // 网格整数坐标（驱动渲染 / 点击检测）
+    float    fx, fy;             // 浮点坐标（SetPos 同步 x/y = roundf(fx/fy)）
     float    vx, vy;             // 速度（网格单位/秒）
     float    radius;             // 视觉填充比例 0..1
-    uint32_t color;              // ABGR 格式，可用 IM_COL32 生成
+    uint32_t color;              // ABGR 格式，可用 IM_COL32 / RGBA 生成
     uint8_t  type;               // 调用方定义的类型标签
     char     label[16];          // 显示名称
     void*    userdata = nullptr; // 指向游戏自有结构，库不解读也不释放
 };
 ```
+
+`Entity` 支持链式 setter：`e.SetPos(fx, fy).SetVel(vx, vy).SetColor(r,g,b).SetType(1).SetLabel("#%d", id)`。
 
 ### Cell
 
@@ -350,11 +357,19 @@ dui::DrawCanvas(world, &view);
 
 | 操作 | 效果 |
 |------|------|
-| 左键点击实体 | 选中 |
+| 左键单击实体 | 选中（相机不动） |
+| 左键双击实体 | 选中并把相机跳到该实体位置 |
 | 左键点击格子 | 选中格子（Inspector 显示详情） |
+| Shift/Ctrl+左键拖拽 | 框选多个实体 |
+| Ctrl+左键点实体 | 多选切换 |
 | 滚轮 | 缩放（以鼠标位置为锚点） |
 | 中键拖拽 | 平移相机（自动退出跟随模式） |
+| 右键拖拽 | 平移相机（自由模式下） |
+| 右键单击 | 上下文菜单（实体/格子/背景） |
 | Toolbar → Fit | 自动缩放居中显示当前地图所有内容 |
+| Toolbar → 跟随/自由 | 切换相机跟随模式（默认"自由"） |
+
+**工具栏第一行** 6 个显示开关（格线/格子/实体/标签/坐标轴/轨迹）—— 连线和热力图的批量开关已迁移到「图层」面板，避免与逐项开关重叠。
 
 ### 检视器 DrawInspector
 
@@ -423,7 +438,95 @@ dui::DrawWatch();
 dui::DrawCommands();
 ```
 
-显示所有注册命令，支持搜索过滤、按类别折叠。见[命令注册](#命令注册)。
+显示所有注册命令，支持搜索过滤、按类别折叠。每条命令右侧的 `[K]` 按钮可绑定快捷键。见[命令注册](#命令注册)。
+
+### 其余内置面板
+
+`DrawAll` 还会调用如下面板（按需可单独调用）：
+
+| 面板 | API | 用途 |
+|---|---|---|
+| 事件 | `DrawEvents()` | 时间线事件流（带分类/严重级颜色） |
+| Profiler | `DrawProfiler()` | 帧火焰图 + 均值表，用 `DUI_PROFILE_SCOPE("name")` 插桩 |
+| 回放 | `DrawReplayPanel(world)` | World 录制 + 时间倒带（见 Round 6） |
+| 小地图 | `DrawMinimap(world)` | 当前地图俯视图，点击跳镜 |
+| 图层 | `DrawLayerPanel(world)` | 运行时开关所有 overlay / heatmap / link |
+| 全局搜索 | `DrawGlobalSearch(world)` | Ctrl+F / Ctrl+P 统一搜实体/命令/格子/标注/书签 |
+
+> 完整 API 速查见 [`docs/api-reference.md`](docs/api-reference.md)。
+
+---
+
+## 调试深水区（Round 6 / Round 7）
+
+> 详细 API 见 [`docs/api-reference.md`](docs/api-reference.md) 相应章节。
+
+### 时间控制 — Pause / Step / Speed
+
+```cpp
+#include "dui_time.h"
+
+float eff = dui::EffectiveDt(dt);   // 暂停→0；步进→raw_dt 一次；否则 dt*scale
+TickMockWorld(world, eff);          // 把 eff 传给你的世界 tick
+
+dui::SetWorldPaused(true);          // 也可命令式控制
+dui::SetTimeScale(2.f);             // 0.0625–8.0
+dui::RequestSingleStep();
+```
+
+热键（Demo 已绑定）：`Space` 暂停 / `.` 单帧 / `[` `]` 速度 ÷2/×2。
+
+### Replay 录制 + 时间倒带
+
+```cpp
+#include "dui_replay.h"
+
+dui::EnableReplayRecording(true);   // 默认关闭，按 F8 切换
+dui::SetReplayBufferSize(600);      // 默认 600 帧（≈10s @ 60fps）
+// 进入回放后画布自动暂停 + 禁交互；回放面板提供时间轴和播放按钮
+```
+
+启用后每帧捕获完整 World 快照到环形缓冲。打开「回放」面板拖动时间轴即可倒带。
+
+### 实体行为日志
+
+```cpp
+#include "dui_entity_log.h"
+
+dui::LogEntity     (e.id, u8"切换目标 #%d", target_id);
+dui::LogEntityWarn (e.id, u8"路径失败");
+dui::LogEntityError(e.id, u8"碰撞异常");
+// 实体详情面板自动显示该实体的最近日志（默认 32 条）
+// DespawnEntity 销毁实体时自动清理对应日志
+```
+
+### 选择组 Ctrl+1..9
+
+```cpp
+#include "dui_select_group.h"
+
+dui::SaveSelectionGroup  (world, /*slot=*/1);  // 保存当前多选到槽 1
+dui::RecallSelectionGroup(world, 1);           // 恢复
+```
+
+Demo 已绑定 `Ctrl+Shift+1..9` 保存、`Ctrl+1..9` 恢复。
+
+### 图层开关
+
+`DrawLayerPanel` 把所有已注册的 `RegisterEntityOverlay` / `RegisterCellOverlay` / `RegisterCellHeatmap` / `RegisterEntityLinks` / `RegisterCellLinks` / `RegisterGlobalOverlay` 列成可勾选的复选框。热力图组和连线组带有"整体批量开关"，避免和场景视图工具栏功能重复。
+
+```cpp
+// 用代码控制图层开关（同样改变面板里的勾选状态）
+dui::SetLayerEnabled("Heatmap", u8"经过频率", false);
+
+// 枚举当前注册的图层
+std::vector<dui::LayerInfo> layers;
+dui::ListLayers(layers);
+```
+
+### Inspector 过滤器收藏
+
+在检视器实体列表工具栏点击 `★` 可把当前的搜索/类型/排序/分组组合存为命名预设，下次启动自动加载（`dui_inspector_presets.ini`）。
 
 ---
 
@@ -478,13 +581,20 @@ dui::RegisterCommand(u8"World/重置世界", [&world]() {
 });
 
 dui::RegisterCommand(u8"Player/传送到原点", [&world]() {
-    if (!world.entities.empty()) {
-        world.entities[0].x = world.entities[0].y = 0;
-        world.entities[0].fx = world.entities[0].fy = 0.f;
-    }
+    if (!world.entities.empty())
+        world.entities[0].SetPos(0.f, 0.f).SetVel(0.f, 0.f);  // 链式 setter 自动同步 x/y
 });
 
 dui::UnregisterCommand(u8"World/重置世界");  // 取消注册
+
+// 带参数命令：弹出模态表单收集参数
+dui::RegisterCommandWithArgs(u8"Player/传送到坐标", {
+    dui::CommandArg::Int("X", 0, -50.f, 50.f),
+    dui::CommandArg::Int("Y", 0, -50.f, 50.f),
+}, [&world](const dui::CommandArgValue* v, int /*n*/) {
+    if (!world.entities.empty())
+        world.entities[0].SetPos((float)v[0].i, (float)v[1].i).SetVel(0.f, 0.f);
+});
 ```
 
 ---
@@ -531,25 +641,51 @@ cmake --build build --config Release
 
 ```
 src/
-  dui_app.h / .cpp          App 生命周期（Init / Attach / Tick / SetDockLayoutFn）
-  dui_world.h               Entity / Cell / World 数据结构
-  dui_draw_all.h / .cpp     DrawAll — 一次调用绘制所有面板
-  dui_canvas.h / .cpp       场景视图面板
-  dui_inspector.h / .cpp    检视器面板
-  dui_metrics.h / .cpp      性能图表面板
-  dui_log.h / .cpp          日志面板 + Log* API
-  dui_ext.h / .cpp          扩展点（类型名、Canvas 标记、Entity Drawer）
-  dui_detail.h / .cpp       实体详情面板 + RegisterEntityDetailText API
-  dui_commands.h / .cpp     命令面板 + RegisterCommand API
-  dui_mock.h / .cpp         演示用 MakeMockWorld / TickMockWorld（不在库里）
-  dui_demo_setup.h / .cpp   演示用注册代码（不在库里）
-  main.cpp                  演示程序入口
+  dui_app.h / .cpp           App 生命周期（Init / Attach / Tick / SetDockLayoutFn）
+  dui_world.h                Entity / Cell / World 数据结构
+  dui_draw_all.h / .cpp      DrawAll — 一次调用绘制所有面板
+  dui_canvas.h / .cpp        场景视图 + CanvasView + 摄像机书签
+  dui_inspector.h / .cpp     检视器面板 + 过滤器预设
+  dui_metrics.h / .cpp       性能图表面板
+  dui_log.h / .cpp           日志面板 + Log* API
+  dui_ext.h / .cpp           扩展点（类型名 / Canvas Overlay / Heatmap / Links / 标记 / 多选 / 图层枚举）
+  dui_detail.h / .cpp        实体详情面板 + DetailBuilder
+  dui_commands.h / .cpp      命令面板 + 命令注册 + 参数化命令
+  dui_hotkeys.h / .cpp       热键绑定与持久化
+  dui_menubar.h / .cpp       菜单栏 + 面板可见性管理
+  dui_events.h / .cpp        事件时间线面板
+  dui_search.h / .cpp        Ctrl+F / Ctrl+P 全局搜索
+  dui_pins.h / .cpp          世界标注 Pin
+  dui_trails.h / .cpp        实体轨迹 + 格子热度
+  dui_snapshot.h / .cpp      World JSON 快照 (Save/Load)
+  dui_profiler.h / .cpp      帧火焰图（DUI_PROFILE_SCOPE）
+  dui_time.h / .cpp          世界暂停 / 单帧 / 速度倍率
+  dui_replay.h / .cpp        Replay 录制 + 时间倒带
+  dui_entity_log.h / .cpp    每实体行为日志通道
+  dui_minimap.h / .cpp       小地图面板
+  dui_layers.h / .cpp        图层开关面板
+  dui_select_group.h / .cpp  选择组 (Ctrl+1..9)
+  dui_user_metrics.h / .cpp  自定义指标曲线（ConfigureMetric / Push）
+  dui_mock.h / .cpp          演示用 MakeMockWorld / TickMockWorld（不在库里）
+  dui_demo_setup.h / .cpp    演示用注册代码（不在库里）
+  main.cpp                   演示程序入口
+docs/
+  api-reference.md           完整 API 速查
 third_party/
-  imgui/                    Dear ImGui（docking 分支）
-  implot/                   ImPlot
+  imgui/                     Dear ImGui（docking 分支）
+  implot/                    ImPlot
 tests/
-  test_ring_buffer.cpp      RingBuffer 单元测试
+  test_ring_buffer.cpp       RingBuffer 单元测试
 assets/
-  fonts/                    LXGWWenKai-Regular.ttf
-dui.props                   Visual Studio 属性表，导入即可配好所有 include / lib 路径
+  fonts/                     LXGWWenKai-Regular.ttf
+dui.props                    Visual Studio 属性表，导入即可配好所有 include / lib 路径
 ```
+
+**运行期生成的持久化文件**（在 exe 所在目录）：
+
+| 文件 | 内容 |
+|---|---|
+| `debug_ui.ini` | ImGui 窗口位置/停靠布局 |
+| `dui_hotkeys.ini` | 热键绑定 |
+| `dui_bookmarks.ini` | 摄像机书签 |
+| `dui_inspector_presets.ini` | Inspector 过滤器预设 |

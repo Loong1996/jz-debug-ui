@@ -247,6 +247,10 @@ BindHotkey  (ImGuiKey_F5, 0,                   "World/重置世界");
 BindHotkey  (ImGuiKey_R,  ImGuiMod_Ctrl,        "Player/传送到原点");
 UnbindHotkey(ImGuiKey_F5, 0);
 std::string label = GetHotkeyLabel("World/重置世界");  // "[F5]"
+
+// 命令面板里每条命令右侧的 [K] 按钮打开"绑定快捷键"弹窗，按下任意按键即可绑定。
+// 弹窗会跳过修饰键单独按下、Esc 取消、以及所有鼠标键 / 滚轮（避免误绑左键到命令）。
+// 绑定持久化到 dui_hotkeys.ini。
 ```
 
 ---
@@ -342,7 +346,8 @@ SaveCameraBookmark  ("BOSS 房", world);   // 保存当前视角 + 地图
 bool ok = GotoCameraBookmark("BOSS 房", world);  // 切地图 + 跳坐标 + 关 follow
 DeleteCameraBookmark("BOSS 房");
 const std::vector<CameraBookmark>& ListCameraBookmarks();
-CanvasView& GetActiveCanvasView();        // 直接读写 cam_x/y/zoom/follow_player
+CanvasView& GetActiveCanvasView();        // 直接读写 cam_x/y/zoom/follow_player/show_links/show_heatmaps
+// 默认值：cam=(0,0), zoom=1, follow_player=false, show_heatmaps=false, show_links=true
 
 // 书签持久化到 dui_bookmarks.ini（App::Init 自动加载）
 // Canvas 工具栏"书签"按钮提供 GUI 入口
@@ -566,5 +571,21 @@ void ListLayers     (std::vector<LayerInfo>& out);
 void SetLayerEnabled(const char* kind, const char* name, bool on);
 
 // 面板：视图 → 图层（默认停靠右侧）
-// 每类型一个折叠区，每条图层一个复选框；取消勾选立即生效
+//
+// 分组结构：
+//   [☑] 热力图 ▶            ← 整体 checkbox 绑定 CanvasView.show_heatmaps
+//        [☑] tile_visits     ← 逐项 checkbox 绑定 HeatmapEntry.enabled
+//   [☑] 连线 ▶              ← 整体 checkbox 绑定 CanvasView.show_links
+//        [☑] 目标连线        ← EntityLinks + CellLinks 合并在此分组下
+//        [☑] 水→陷阱
+//        全局 Overlay ▶      ← 普通折叠，无组级 checkbox
+//        [☑] xxx
+//        实体 Overlay ▶      ← 仅列已 RegisterEntityOverlay 的类型
+//        [☑] 战士
+//        格子 Overlay ▶      ← 仅列已 RegisterCellOverlay 的类型
+//        [☑] 水域
+//
+// 整体关闭时所有逐项 checkbox 置灰但仍可见。
+// 场景视图工具栏第一行只保留 6 项基础显示（格线/格子/实体/标签/坐标轴/轨迹），
+// 连线 / 热力图 的批量开关已迁移到本面板，避免重叠。
 ```
