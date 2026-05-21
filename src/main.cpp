@@ -1,11 +1,7 @@
 #include <windows.h>
-#include "dui_app.h"
-#include "dui_world.h"
-#include "dui_mock.h"
-#include "dui_metrics.h"
-#include "dui_draw_all.h"
-#include "dui_demo_setup.h"
-#include "dui_trails.h"
+#include "dui.h"              // 库聚合头 —— 一行引入所有 dui API
+#include "dui_mock.h"         // demo only — 不在库里
+#include "dui_demo_setup.h"   // demo only — 不在库里
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     dui::App app;
