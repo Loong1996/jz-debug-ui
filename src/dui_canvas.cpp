@@ -155,13 +155,15 @@ void DrawCanvas(World& world, CanvasView* view) {
                 }
         char map_bufs[64][32]; const char* map_items[64];
         int  map_combo_idx = 0;
+        bool cv_map_found  = false;
         for (int i = 0; i < n_all_maps; ++i) {
             const char* mn = GetMapName(all_map_ids[i]);
             if (mn) std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "%s [%u]", mn, all_map_ids[i]);
             else    std::snprintf(map_bufs[i], sizeof(map_bufs[i]), "Map %u", all_map_ids[i]);
             map_items[i] = map_bufs[i];
-            if (all_map_ids[i] == world.active_map_id) map_combo_idx = i;
+            if (all_map_ids[i] == world.active_map_id) { map_combo_idx = i; cv_map_found = true; }
         }
+        if (!cv_map_found && n_all_maps > 0) SwitchActiveMap(world, all_map_ids[0]);
         ImGui::SetNextItemWidth(110.f);
         if (ImGui::Combo("##cvmap", &map_combo_idx, map_items, n_all_maps) && n_all_maps > 0)
             SwitchActiveMap(world, all_map_ids[map_combo_idx]);

@@ -109,13 +109,14 @@ static bool s_ent_group        = false;
 static void EntityTableImpl(World& world, const std::vector<int>& idxs,
                              const char* tbl_id, bool with_scroll) {
     ImGuiTableFlags flags =
-        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit;
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable;
     if (with_scroll) flags |= ImGuiTableFlags_ScrollY;
 
     if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, with_scroll ? 220.f : 0.f)))
         return;
     if (with_scroll) ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   44.f);
+    ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   64.f);
     ImGui::TableSetupColumn(u8"名称", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn(u8"坐标", ImGuiTableColumnFlags_WidthFixed,   72.f);
     ImGui::TableHeadersRow();
@@ -153,13 +154,14 @@ static void EntityTableImpl(World& world, const std::vector<int>& idxs,
 static void CellTableImpl(World& world, const std::vector<int>& idxs,
                           const char* tbl_id, bool with_scroll) {
     ImGuiTableFlags flags =
-        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit;
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable;
     if (with_scroll) flags |= ImGuiTableFlags_ScrollY;
 
     if (!ImGui::BeginTable(tbl_id, 3, flags, ImVec2(0.f, with_scroll ? 220.f : 0.f)))
         return;
     if (with_scroll) ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   44.f);
+    ImGui::TableSetupColumn("Type",   ImGuiTableColumnFlags_WidthFixed,   64.f);
     ImGui::TableSetupColumn(u8"名称", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn(u8"坐标", ImGuiTableColumnFlags_WidthFixed,   72.f);
     ImGui::TableHeadersRow();
@@ -449,6 +451,7 @@ void DrawInspector(World& world) {
         for(int i=0;i<nm;++i) for(int j=i+1;j<nm;++j)
             if(mids[j]<mids[i]){uint32_t t=mids[i];mids[i]=mids[j];mids[j]=t;}
         char mbufs[64][48]; const char* mitems[64]; int mcidx=0;
+        bool map_found=false;
         for(int i=0;i<nm;++i){
             int ec=0,cc=0;
             for(const auto& e:world.entities) if(e.map_id==mids[i]) ++ec;
@@ -457,7 +460,8 @@ void DrawInspector(World& world) {
             if(mn) std::snprintf(mbufs[i],sizeof(mbufs[i]),u8"%s [%u]  实体%d  格%d",mn,mids[i],ec,cc);
             else   std::snprintf(mbufs[i],sizeof(mbufs[i]),u8"Map %u  实体%d  格%d",mids[i],ec,cc);
             mitems[i]=mbufs[i];
-            if(mids[i]==world.active_map_id) mcidx=i; }
+            if(mids[i]==world.active_map_id){ mcidx=i; map_found=true; } }
+        if(!map_found && nm>0) SwitchActiveMap(world,mids[0]);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(4.f,2.f));
         ImGui::TextUnformatted(u8"地图"); ImGui::SameLine();
         ImGui::SetNextItemWidth(-1.f);

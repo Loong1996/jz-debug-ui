@@ -22,7 +22,7 @@ struct Entity {
     float    radius  = 0.8f;      // visual fill ratio within cell (0..1)
     uint32_t color   = RGBA(180, 180, 180);
     uint8_t  type    = 0;         // caller-defined tag (0 = generic)
-    char     label[16] = {};
+    char     label[64] = {};
     void*    userdata  = nullptr; // caller-owned pointer; library does not interpret or free
 
     // SetPos syncs fx/fy and derives x/y via rounding
@@ -47,6 +47,8 @@ struct Entity {
         va_end(ap);
         return *this;
     }
+    // Convert GBK (CP936) name to UTF-8 and store in label. Windows-only.
+    Entity& SetName4GBK(const char* gbk);
 };
 
 struct Cell {
@@ -54,7 +56,7 @@ struct Cell {
     int      x = 0,  y = 0;
     uint32_t color   = RGBA(120, 120, 120);
     uint8_t  type    = 0;         // caller-defined tag
-    char     label[12] = {};
+    char     label[64] = {};
     void*    userdata  = nullptr; // caller-owned pointer; library does not interpret or free
 
     Cell& SetPos(int x_, int y_)  { x = x_; y = y_; return *this; }
@@ -71,6 +73,8 @@ struct Cell {
         va_end(ap);
         return *this;
     }
+    // Convert GBK (CP936) name to UTF-8 and store in label. Windows-only.
+    Cell& SetName4GBK(const char* gbk);
 };
 
 struct World {

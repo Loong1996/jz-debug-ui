@@ -319,4 +319,19 @@ struct LayerInfo { const char* kind; const char* name; bool enabled; };
 void ListLayers     (std::vector<LayerInfo>& out);
 void SetLayerEnabled(const char* kind, const char* name, bool on);
 
+// ---- Simple entity link (single-target shorthand) ----
+// fn returns target entity id; return 0 to draw no link from this entity.
+// Wraps RegisterEntityLinks internally — no vector allocation in your code.
+using EntityTargetFn = std::function<uint64_t(const Entity&)>;
+void RegisterEntityLink(const char* name, EntityTargetFn fn,
+                        uint32_t color     = RGBA(255, 200, 0, 180),
+                        float    thickness = 1.5f,
+                        bool     dashed    = true,
+                        bool     arrow     = true);
+
+// ---- GBK / UTF-8 encoding utility ----
+// Converts a GBK (CP936) string to UTF-8, writes at most out_size bytes.
+// Returns true on success. On non-Windows platforms copies bytes as-is.
+bool GbkToUtf8(const char* gbk, char* utf8_out, int out_size);
+
 } // namespace dui

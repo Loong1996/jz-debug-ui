@@ -1,3 +1,8 @@
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 #include "dui_ext.h"
 #include "dui_trails.h"
 #include "dui_entity_log.h"
@@ -654,6 +659,52 @@ Cell& SpawnCellAt(World& w, uint32_t map_id, int x, int y, uint8_t type, const c
     c.SetMapId(map_id).SetType(type);
     if (label) c.SetLabel("%s", label);
     return c;
+}
+
+// ---- GBK → UTF-8 ----
+
+bool GbkToUtf8(const char* gbk, char* utf8_out, int out_size) {
+    if (!gbk || !utf8_out || out_size <= 0) return false;
+#ifdef _WIN32
+    wchar_t wbuf[256];
+    int wlen = MultiByteToWideChar(936, 0, gbk, -1, wbuf, 256);
+    if (wlen <= 0) { utf8_out[0] = '\0'; return false; }
+    int ulen = WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, utf8_out, out_size, nullptr, nullptr);
+    if (ulen <= 0) { utf8_out[0] = '\0'; return false; }
+    return true;
+#else
+    int i = 0;
+    while (gbk[i] && i < out_size - 1) { utf8_out[i] = gbk[i]; ++i; }
+    utf8_out[i] = '\0';
+    return false;
+#endif
+}
+
+Entity& Entity::SetName4GBK(const char* gbk) {
+    GbkToUtf8(gbk, label, sizeof(label));
+    return *this;
+}
+
+Cell& Cell::SetName4GBK(const char* gbk) {
+    GbkToUtf8(gbk, label, sizeof(label));
+    return *this;
+}
+
+// ---- Simple entity link (single-target shorthand) ----
+
+void RegisterEntityLink(const char* name, EntityTargetFn fn,
+                        uint32_t color, float thickness, bool dashed, bool arrow) {
+    RegisterEntityLinks(name, [fn, color, thickness, dashed, arrow](const Entity& e) -> std::vector<EntityLink> {
+        uint64_t tid = fn(e);
+        if (!tid) return {};
+        EntityLink lnk;
+        lnk.target_id = tid;
+        lnk.color     = color;
+        lnk.thickness = thickness;
+        lnk.dashed    = dashed;
+        lnk.arrow     = arrow;
+        return { lnk };
+    });
 }
 
 } // namespace dui
